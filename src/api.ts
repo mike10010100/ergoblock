@@ -123,7 +123,7 @@ export function getSession(): BskySession | null {
             pdsUrl,
           };
         }
-      } catch (e) {
+      } catch (_e) {
         // Continue to next key
       }
     }
