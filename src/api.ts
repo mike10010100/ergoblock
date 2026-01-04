@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 // AT Protocol API helpers for Bluesky
 // Handles block/mute/unblock/unmute operations
 
@@ -38,14 +39,25 @@ interface StorageStructure {
   pdsUrl?: string;
 }
 
+// Helper to safely access localStorage
+const getLocalStorage = () => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return window.localStorage;
+  }
+  return null;
+};
+
 /**
  * Get the current session from Bluesky's localStorage
  * @returns {Object|null} Session object with accessJwt and did
  */
 export function getSession(): BskySession | null {
   try {
+    const storage = getLocalStorage();
+    if (!storage) return null;
+
     // Try multiple possible storage key patterns
-    const possibleKeys = Object.keys(localStorage).filter(
+    const possibleKeys = Object.keys(storage).filter(
       (k) => k.includes('BSKY') || k.includes('bsky') || k.includes('session')
     );
 
@@ -53,7 +65,7 @@ export function getSession(): BskySession | null {
 
     for (const storageKey of possibleKeys) {
       try {
-        const raw = localStorage.getItem(storageKey);
+        const raw = storage.getItem(storageKey);
         if (!raw) continue;
 
         const storage = JSON.parse(raw) as StorageStructure;
@@ -85,25 +97,31 @@ export function getSession(): BskySession | null {
           session = storage;
         }
 
-        if (session && 'accessJwt' in session && session.accessJwt && 'did' in session && session.did) {
-            const validSession = session as BskyAccount; // Safe cast after check
-            console.log('[TempBlock] Found session for:', validSession.handle || validSession.did);
-            // Normalize the PDS URL
-            let pdsUrl = validSession.pdsUrl || validSession.service || BSKY_PDS_DEFAULT;
-            // Remove trailing slashes
-            pdsUrl = pdsUrl.replace(/\/+$/, '');
-            // Ensure https:// prefix
-            if (!pdsUrl.startsWith('http://') && !pdsUrl.startsWith('https://')) {
-              pdsUrl = 'https://' + pdsUrl;
-            }
-            console.log('[TempBlock] Using PDS URL:', pdsUrl);
-            return {
-              accessJwt: validSession.accessJwt!,
-              refreshJwt: validSession.refreshJwt,
-              did: validSession.did,
-              handle: validSession.handle || '',
-              pdsUrl,
-            };
+        if (
+          session &&
+          'accessJwt' in session &&
+          session.accessJwt &&
+          'did' in session &&
+          session.did
+        ) {
+          const validSession = session as BskyAccount; // Safe cast after check
+          console.log('[TempBlock] Found session for:', validSession.handle || validSession.did);
+          // Normalize the PDS URL
+          let pdsUrl = validSession.pdsUrl || validSession.service || BSKY_PDS_DEFAULT;
+          // Remove trailing slashes
+          pdsUrl = pdsUrl.replace(/\/+$/, '');
+          // Ensure https:// prefix
+          if (!pdsUrl.startsWith('http://') && !pdsUrl.startsWith('https://')) {
+            pdsUrl = 'https://' + pdsUrl;
+          }
+          console.log('[TempBlock] Using PDS URL:', pdsUrl);
+          return {
+            accessJwt: validSession.accessJwt!,
+            refreshJwt: validSession.refreshJwt,
+            did: validSession.did,
+            handle: validSession.handle || '',
+            pdsUrl,
+          };
         }
       } catch (e) {
         // Continue to next key

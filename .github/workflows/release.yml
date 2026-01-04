@@ -43,6 +43,10 @@ jobs:
         if: steps.check-tag.outputs.exists == 'false'
         run: npm ci --legacy-peer-deps
 
+      - name: Run tests
+        if: steps.check-tag.outputs.exists == 'false'
+        run: npm run test
+
       - name: Build Extension
         if: steps.check-tag.outputs.exists == 'false'
         run: npm run build

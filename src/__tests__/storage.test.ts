@@ -1,24 +1,39 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { addTempBlock } from '../storage.js';
 
-describe('storage module', () => {
+describe('Storage', () => {
   beforeEach(() => {
-    // Mock chrome.storage
-    global.chrome = {
+    vi.clearAllMocks();
+
+    // Mock chrome API
+    const chromeMock = {
       storage: {
         sync: {
-          get: vi.fn().mockResolvedValue({}),
-          set: vi.fn().mockResolvedValue(undefined),
+          get: vi.fn().mockResolvedValue({ tempBlocks: {} }),
+          set: vi.fn(),
         },
         local: {
-          get: vi.fn().mockResolvedValue({}),
-          set: vi.fn().mockResolvedValue(undefined),
+          get: vi.fn(),
+          set: vi.fn(),
         },
       },
-    } as any;
+      runtime: {
+        sendMessage: vi.fn(),
+      },
+    };
+
+    vi.stubGlobal('chrome', chromeMock);
   });
 
-  it('should export storage functions', async () => {
-    // Basic smoke test - just ensure module loads
-    expect(true).toBe(true);
+  it('should add a temp block', async () => {
+    await addTempBlock('did:test:123', 'test.bsky.social');
+
+    expect(chrome.storage.sync.set).toHaveBeenCalled();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'TEMP_BLOCK_ADDED',
+        did: 'did:test:123',
+      })
+    );
   });
 });
