@@ -36,7 +36,7 @@ jobs:
         run: npx prettier --check "src/**/*.{ts,js}" "*.{json,js,html}" ".github/**/*.yml"
 
       - name: Run tests with coverage
-        run: npx vitest run --coverage > coverage_output.txt || (cat coverage_output.txt && exit 1)
+        run: npx vitest run --coverage > coverage_output.txt 2>&1 || (cat coverage_output.txt && exit 1)
 
       - name: Add coverage to summary
         if: always()
