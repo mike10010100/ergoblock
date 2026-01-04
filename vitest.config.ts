@@ -9,11 +9,18 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       all: true,
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.test.ts', 'src/content.ts', 'src/popup.ts'],
-      lines: 50,
-      functions: 50,
-      branches: 50,
-      statements: 50,
+      exclude: [
+        'src/**/*.test.ts',
+        'src/content.ts',
+        'src/popup.ts',
+        'src/options.ts'
+      ],
+      thresholds: {
+        lines: 75,
+        functions: 70,
+        branches: 65,
+        statements: 75,
+      }
     },
   },
 });
