@@ -58,7 +58,14 @@ Uses `MutationObserver` to detect when menus open (`[role="menu"]`). Tracks `las
 - **Checks**: Lint (ESLint), Format (Prettier), and Tests (Vitest) must pass on every PR.
 - **Coverage**: Test coverage results are posted directly to the GitHub Action **Step Summary** for each run.
 - **Version Bump**: PRs are blocked unless `package.json` version is incremented.
-- **Releases**: Merging to `main` with a new version automatically tags the repo and creates a GitHub Release with a production `.zip`.
+
+## Versioning & Manifest Sync
+
+- **Source of Truth**: The `version` in `package.json` is the authoritative version for the project.
+- **Automation**: 
+  - A `pre-commit` hook runs `npm run sync-version` (via `scripts/sync-version.js`) to keep the root `manifest.json` in sync with `package.json`.
+  - The build script (`scripts/copy-assets.js`) also synchronizes the version into the `dist/manifest.json` during the build process.
+- **Manual Action**: Only update the version in `package.json`. The rest is handled automatically on commit and build.
 
 ## Common Issues
 
