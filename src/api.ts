@@ -22,11 +22,11 @@ const getLocalStorage = () => {
  */
 export function getSession(): BskySession | null {
   try {
-    const storage = getLocalStorage();
-    if (!storage) return null;
+    const localStorageProxy = getLocalStorage();
+    if (!localStorageProxy) return null;
 
     // Try multiple possible storage key patterns
-    const possibleKeys = Object.keys(storage).filter(
+    const possibleKeys = Object.keys(localStorageProxy).filter(
       (k) => k.includes('BSKY') || k.includes('bsky') || k.includes('session')
     );
 
@@ -34,48 +34,36 @@ export function getSession(): BskySession | null {
 
     for (const storageKey of possibleKeys) {
       try {
-        const raw = storage.getItem(storageKey);
+        const raw = localStorageProxy.getItem(storageKey);
         if (!raw) continue;
 
-        const storage = JSON.parse(raw) as StorageStructure;
-        console.log('[TempBlock] Checking storage key:', storageKey, storage);
+        const parsed = JSON.parse(raw) as StorageStructure;
+        console.log('[TempBlock] Checking storage key:', storageKey, parsed);
 
         // Try different possible structures
-        let session: BskyAccount | StorageStructure | null = null;
+        let account: BskyAccount | null = null;
 
         // Structure 1: { session: { currentAccount: {...}, accounts: [...] } }
-        if (storage?.session?.currentAccount) {
-          const currentDid = storage.session.currentAccount.did;
-          const account = storage.session.accounts?.find((a) => a.did === currentDid);
-          if (account?.accessJwt) {
-            session = account;
-          }
+        if (parsed?.session?.currentAccount) {
+          const currentDid = parsed.session.currentAccount.did;
+          account = parsed.session.accounts?.find((a) => a.did === currentDid) || null;
         }
 
         // Structure 2: { currentAccount: {...}, accounts: [...] }
-        if (!session && storage?.currentAccount) {
-          const currentDid = storage.currentAccount.did;
-          const account = storage.accounts?.find((a) => a.did === currentDid);
-          if (account?.accessJwt) {
-            session = account;
-          }
+        if (!account && parsed?.currentAccount) {
+          const currentDid = parsed.currentAccount.did;
+          account = parsed.accounts?.find((a) => a.did === currentDid) || null;
         }
 
         // Structure 3: Direct account object
-        if (!session && storage?.accessJwt && storage?.did) {
-          session = storage;
+        if (!account && parsed?.accessJwt && parsed?.did) {
+          account = parsed as unknown as BskyAccount;
         }
 
-        if (
-          session &&
-          'accessJwt' in session &&
-          session.accessJwt &&
-          'did' in session &&
-          session.did
-        ) {
-          console.log('[TempBlock] Found session for:', validSession.handle || validSession.did);
+        if (account && account.accessJwt && account.did) {
+          console.log('[TempBlock] Found session for:', account.handle || account.did);
           // Normalize the PDS URL
-          let pdsUrl = validSession.pdsUrl || validSession.service || BSKY_PDS_DEFAULT;
+          let pdsUrl = account.pdsUrl || account.service || BSKY_PDS_DEFAULT;
           // Remove trailing slashes
           pdsUrl = pdsUrl.replace(/\/+$/, '');
           // Ensure https:// prefix
@@ -84,16 +72,11 @@ export function getSession(): BskySession | null {
           }
           console.log('[TempBlock] Using PDS URL:', pdsUrl);
 
-          if (!validSession.accessJwt) {
-            console.error('[TempBlock] Session found but accessJwt is missing');
-            return null;
-          }
-
           return {
-            accessJwt: validSession.accessJwt,
-            refreshJwt: validSession.refreshJwt,
-            did: validSession.did,
-            handle: validSession.handle || '',
+            accessJwt: account.accessJwt,
+            refreshJwt: account.refreshJwt,
+            did: account.did,
+            handle: account.handle || '',
             pdsUrl,
           };
         }

@@ -13,15 +13,13 @@ export default defineConfig({
         'src/**/*.test.ts',
         'src/content.ts',
         'src/popup.ts',
-        'src/background.ts',
-        'src/api.ts',
         'src/options.ts'
       ],
       thresholds: {
-        lines: 20,
-        functions: 15,
-        branches: 10,
-        statements: 20,
+        lines: 75,
+        functions: 70,
+        branches: 65,
+        statements: 75,
       }
     },
   },
