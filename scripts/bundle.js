@@ -12,7 +12,7 @@ async function build() {
     for (const entry of entryPoints) {
       await esbuild.build({
         entryPoints: [entry],
-        bundle: false,
+        bundle: true,
         format: 'esm',
         target: 'es2020',
         outdir: 'dist',
