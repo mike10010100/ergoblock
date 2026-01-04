@@ -1,5 +1,7 @@
 # ErgoBlock for Bluesky
 
+[![PR Checks](https://github.com/PropterMalone/ergoblock/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/PropterMalone/ergoblock/actions/workflows/pr-checks.yml)
+
 A Chrome extension that adds temporary block and mute functionality to Bluesky's web interface. Blocks and mutes automatically expire after your chosen duration.
 
 ## Features

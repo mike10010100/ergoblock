@@ -36,7 +36,16 @@ jobs:
         run: npx prettier --check "src/**/*.{ts,js}" "*.{json,js,html}" ".github/**/*.yml"
 
       - name: Run tests with coverage
-        run: npm run test -- --coverage
+        run: npx vitest run --coverage > coverage_output.txt || (cat coverage_output.txt && exit 1)
+
+      - name: Add coverage to summary
+        if: always()
+        run: |
+          echo "### Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          # Extract the table from vitest output (usually starts with '----------')
+          sed -n '/----/,/----/p' coverage_output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Build verification
         run: npm run build
