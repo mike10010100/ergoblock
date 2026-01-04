@@ -2,7 +2,7 @@
 
 const STORAGE_KEYS = {
   TEMP_BLOCKS: 'tempBlocks',
-  TEMP_MUTES: 'tempMutes'
+  TEMP_MUTES: 'tempMutes',
 };
 
 let currentTab = 'blocks';
@@ -127,7 +127,7 @@ function switchTab(tab) {
   currentTab = tab;
 
   // Update tab styles
-  document.querySelectorAll('.tab').forEach(t => {
+  document.querySelectorAll('.tab').forEach((t) => {
     t.classList.toggle('active', t.dataset.tab === tab);
   });
 
@@ -171,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderMutes();
 
   // Tab switching
-  document.querySelectorAll('.tab').forEach(tab => {
+  document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
 

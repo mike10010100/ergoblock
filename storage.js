@@ -3,7 +3,7 @@
 
 const STORAGE_KEYS = {
   TEMP_BLOCKS: 'tempBlocks',
-  TEMP_MUTES: 'tempMutes'
+  TEMP_MUTES: 'tempMutes',
 };
 
 const DEFAULT_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours default
@@ -37,7 +37,7 @@ async function addTempBlock(did, handle, durationMs = DEFAULT_DURATION_MS) {
   blocks[did] = {
     handle,
     expiresAt: Date.now() + durationMs,
-    createdAt: Date.now()
+    createdAt: Date.now(),
   };
   await chrome.storage.sync.set({ [STORAGE_KEYS.TEMP_BLOCKS]: blocks });
   // Notify background to set alarm
@@ -55,7 +55,7 @@ async function addTempMute(did, handle, durationMs = DEFAULT_DURATION_MS) {
   mutes[did] = {
     handle,
     expiresAt: Date.now() + durationMs,
-    createdAt: Date.now()
+    createdAt: Date.now(),
   };
   await chrome.storage.sync.set({ [STORAGE_KEYS.TEMP_MUTES]: mutes });
   // Notify background to set alarm
@@ -117,6 +117,6 @@ if (typeof window !== 'undefined') {
     removeTempMute,
     getExpiredBlocks,
     getExpiredMutes,
-    DEFAULT_DURATION_MS
+    DEFAULT_DURATION_MS,
   };
 }

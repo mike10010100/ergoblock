@@ -9,11 +9,16 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       all: true,
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.test.ts', 'src/content.ts', 'src/popup.ts'],
-      lines: 50,
-      functions: 50,
-      branches: 50,
-      statements: 50,
+      // Exclude test files and DOM-heavy UI files that directly access DOM elements on import
+      // These files are difficult to test in isolation without a full browser environment
+      exclude: ['src/**/*.test.ts', 'src/content.ts', 'src/popup.ts', 'src/options.ts'],
+      // Target 95% coverage for the testable files (storage.ts, background.ts, types.ts)
+      thresholds: {
+        lines: 95,
+        functions: 90,
+        branches: 75,
+        statements: 95,
+      },
     },
   },
 });

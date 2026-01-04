@@ -1,7 +1,7 @@
 // Content script for Bluesky Temp Block & Mute
 // Injects menu options into Bluesky's dropdown menus
 
-(function() {
+(function () {
   'use strict';
 
   const MENU_ITEM_SELECTOR = '[data-testid="profileHeaderDropdownBtn"]';
@@ -23,9 +23,13 @@
 
   // Track the last clicked element to help identify menu context
   let lastClickedElement = null;
-  document.addEventListener('click', (e) => {
-    lastClickedElement = e.target;
-  }, true);
+  document.addEventListener(
+    'click',
+    (e) => {
+      lastClickedElement = e.target;
+    },
+    true
+  );
 
   /**
    * Extract user info from a dropdown menu context
@@ -52,7 +56,9 @@
     // and find the post container, then get the author from there
     if (lastClickedElement) {
       // Find the post container (usually has data-testid="feedItem" or similar)
-      const postContainer = lastClickedElement.closest('[data-testid*="feedItem"], [data-testid*="postThreadItem"], article, [data-testid*="post"]');
+      const postContainer = lastClickedElement.closest(
+        '[data-testid*="feedItem"], [data-testid*="postThreadItem"], article, [data-testid*="post"]'
+      );
       if (postContainer) {
         // Find the author's profile link in the post
         const authorLink = postContainer.querySelector('a[href*="/profile/"]');
@@ -211,7 +217,7 @@
       gap: 8px;
     `;
 
-    DURATION_OPTIONS.forEach(option => {
+    DURATION_OPTIONS.forEach((option) => {
       const btn = document.createElement('button');
       btn.style.cssText = `
         padding: 10px 16px;
@@ -362,7 +368,6 @@
       closeMenus();
       console.log('[TempBlock] Showing success toast');
       showToast(`Temporarily blocked @${profile.handle} for ${durationLabel}`);
-
     } catch (error) {
       console.error('[TempBlock] Failed to temp block:', error);
       showToast(`Failed to block: ${error.message}`, true);
@@ -389,7 +394,6 @@
 
       closeMenus();
       showToast(`Temporarily muted @${profile.handle} for ${durationLabel}`);
-
     } catch (error) {
       console.error('[TempBlock] Failed to temp mute:', error);
       showToast(`Failed to mute: ${error.message}`, true);
@@ -479,21 +483,23 @@
 
           // Look for dropdown menus
           // Bluesky uses various portal/menu containers
-          const menus = node.querySelectorAll ?
-            [node, ...node.querySelectorAll('[role="menu"], [data-radix-menu-content]')] :
-            [node];
+          const menus = node.querySelectorAll
+            ? [node, ...node.querySelectorAll('[role="menu"], [data-radix-menu-content]')]
+            : [node];
 
           for (const menu of menus) {
-            if (menu.getAttribute?.('role') === 'menu' ||
-                menu.hasAttribute?.('data-radix-menu-content') ||
-                menu.querySelector?.('[role="menuitem"]')) {
-
+            if (
+              menu.getAttribute?.('role') === 'menu' ||
+              menu.hasAttribute?.('data-radix-menu-content') ||
+              menu.querySelector?.('[role="menuitem"]')
+            ) {
               // Check if this menu has block/mute options (indicating it's a user menu)
-              const hasBlockOption = Array.from(menu.querySelectorAll('[role="menuitem"]'))
-                .some(item => {
+              const hasBlockOption = Array.from(menu.querySelectorAll('[role="menuitem"]')).some(
+                (item) => {
                   const text = item.textContent?.toLowerCase() || '';
                   return text.includes('block') || text.includes('mute');
-                });
+                }
+              );
 
               if (hasBlockOption) {
                 // Small delay to ensure menu is fully rendered
@@ -507,7 +513,7 @@
 
     currentObserver.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
 
     console.log('[TempBlock] Menu observer started');
@@ -524,8 +530,8 @@
         auth: {
           accessJwt: session.accessJwt,
           did: session.did,
-          pdsUrl: session.pdsUrl
-        }
+          pdsUrl: session.pdsUrl,
+        },
       });
       console.log('[TempBlock] Auth synced to background (PDS:', session.pdsUrl, ')');
     }

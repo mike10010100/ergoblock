@@ -13,8 +13,8 @@ const BSKY_PDS_DEFAULT = 'https://bsky.social';
 function getSession() {
   try {
     // Try multiple possible storage key patterns
-    const possibleKeys = Object.keys(localStorage).filter(k =>
-      k.includes('BSKY') || k.includes('bsky') || k.includes('session')
+    const possibleKeys = Object.keys(localStorage).filter(
+      (k) => k.includes('BSKY') || k.includes('bsky') || k.includes('session')
     );
 
     console.log('[TempBlock] Found storage keys:', possibleKeys);
@@ -33,7 +33,7 @@ function getSession() {
         // Structure 1: { session: { currentAccount: {...}, accounts: [...] } }
         if (storage?.session?.currentAccount) {
           const currentDid = storage.session.currentAccount.did;
-          const account = storage.session.accounts?.find(a => a.did === currentDid);
+          const account = storage.session.accounts?.find((a) => a.did === currentDid);
           if (account?.accessJwt) {
             session = account;
           }
@@ -42,7 +42,7 @@ function getSession() {
         // Structure 2: { currentAccount: {...}, accounts: [...] }
         if (!session && storage?.currentAccount) {
           const currentDid = storage.currentAccount.did;
-          const account = storage.accounts?.find(a => a.did === currentDid);
+          const account = storage.accounts?.find((a) => a.did === currentDid);
           if (account?.accessJwt) {
             session = account;
           }
@@ -69,7 +69,7 @@ function getSession() {
             refreshJwt: session.refreshJwt,
             did: session.did,
             handle: session.handle,
-            pdsUrl
+            pdsUrl,
           };
         }
       } catch (e) {
@@ -119,9 +119,9 @@ async function apiRequest(endpoint, method = 'GET', body = null, baseUrl = null)
   const options = {
     method,
     headers: {
-      'Authorization': `Bearer ${session.accessJwt}`,
-      'Content-Type': 'application/json'
-    }
+      Authorization: `Bearer ${session.accessJwt}`,
+      'Content-Type': 'application/json',
+    },
   };
 
   if (body) {
@@ -152,13 +152,13 @@ async function blockUser(did) {
   const record = {
     $type: 'app.bsky.graph.block',
     subject: did,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
 
   return apiRequest('com.atproto.repo.createRecord', 'POST', {
     repo: session.did,
     collection: 'app.bsky.graph.block',
-    record
+    record,
   });
 }
 
@@ -175,7 +175,7 @@ async function unblockUser(did) {
     `com.atproto.repo.listRecords?repo=${session.did}&collection=app.bsky.graph.block&limit=100`
   );
 
-  const blockRecord = blocks.records?.find(r => r.value.subject === did);
+  const blockRecord = blocks.records?.find((r) => r.value.subject === did);
   if (!blockRecord) {
     console.log('[TempBlock] No block record found for', did);
     return null;
@@ -186,7 +186,7 @@ async function unblockUser(did) {
   return apiRequest('com.atproto.repo.deleteRecord', 'POST', {
     repo: session.did,
     collection: 'app.bsky.graph.block',
-    rkey
+    rkey,
   });
 }
 
@@ -198,9 +198,14 @@ async function muteUser(did) {
   const session = getSession();
   if (!session) throw new Error('Not logged in');
   // Mute goes to user's PDS
-  return apiRequest('app.bsky.graph.muteActor', 'POST', {
-    actor: did
-  }, session.pdsUrl);
+  return apiRequest(
+    'app.bsky.graph.muteActor',
+    'POST',
+    {
+      actor: did,
+    },
+    session.pdsUrl
+  );
 }
 
 /**
@@ -211,9 +216,14 @@ async function unmuteUser(did) {
   const session = getSession();
   if (!session) throw new Error('Not logged in');
   // Unmute goes to user's PDS
-  return apiRequest('app.bsky.graph.unmuteActor', 'POST', {
-    actor: did
-  }, session.pdsUrl);
+  return apiRequest(
+    'app.bsky.graph.unmuteActor',
+    'POST',
+    {
+      actor: did,
+    },
+    session.pdsUrl
+  );
 }
 
 /**
@@ -232,6 +242,6 @@ if (typeof window !== 'undefined') {
     unblockUser,
     muteUser,
     unmuteUser,
-    getProfile
+    getProfile,
   };
 }

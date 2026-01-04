@@ -7,7 +7,7 @@ const CHECK_INTERVAL_MINUTES = 1; // Check every minute
 const STORAGE_KEYS = {
   TEMP_BLOCKS: 'tempBlocks',
   TEMP_MUTES: 'tempMutes',
-  AUTH_TOKEN: 'authToken'
+  AUTH_TOKEN: 'authToken',
 };
 
 /**
@@ -30,9 +30,9 @@ async function apiRequest(endpoint, method, body, token, pdsUrl) {
   const options = {
     method,
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
   };
 
   if (body) {
@@ -64,18 +64,24 @@ async function unblockUser(did, token, ownerDid, pdsUrl) {
     pdsUrl
   );
 
-  const blockRecord = blocks.records?.find(r => r.value.subject === did);
+  const blockRecord = blocks.records?.find((r) => r.value.subject === did);
   if (!blockRecord) {
     console.log('[TempBlock BG] No block record found for', did);
     return false;
   }
 
   const rkey = blockRecord.uri.split('/').pop();
-  await apiRequest('com.atproto.repo.deleteRecord', 'POST', {
-    repo: ownerDid,
-    collection: 'app.bsky.graph.block',
-    rkey
-  }, token, pdsUrl);
+  await apiRequest(
+    'com.atproto.repo.deleteRecord',
+    'POST',
+    {
+      repo: ownerDid,
+      collection: 'app.bsky.graph.block',
+      rkey,
+    },
+    token,
+    pdsUrl
+  );
 
   return true;
 }
@@ -84,9 +90,15 @@ async function unblockUser(did, token, ownerDid, pdsUrl) {
  * Unmute a user
  */
 async function unmuteUser(did, token, pdsUrl) {
-  await apiRequest('app.bsky.graph.unmuteActor', 'POST', {
-    actor: did
-  }, token, pdsUrl);
+  await apiRequest(
+    'app.bsky.graph.unmuteActor',
+    'POST',
+    {
+      actor: did,
+    },
+    token,
+    pdsUrl
+  );
   return true;
 }
 
@@ -98,8 +110,10 @@ async function checkExpirations() {
 
   const auth = await getAuthToken();
   if (!auth?.accessJwt || !auth?.did || !auth?.pdsUrl) {
-    console.log('[TempBlock BG] No auth token available, skipping check. Has:',
-      auth ? `jwt:${!!auth.accessJwt}, did:${!!auth.did}, pds:${!!auth.pdsUrl}` : 'null');
+    console.log(
+      '[TempBlock BG] No auth token available, skipping check. Has:',
+      auth ? `jwt:${!!auth.accessJwt}, did:${!!auth.did}, pds:${!!auth.pdsUrl}` : 'null'
+    );
     return;
   }
 
@@ -156,7 +170,7 @@ async function setupAlarm() {
 
   // Create new alarm that fires every minute
   await chrome.alarms.create(ALARM_NAME, {
-    periodInMinutes: CHECK_INTERVAL_MINUTES
+    periodInMinutes: CHECK_INTERVAL_MINUTES,
   });
 
   console.log('[TempBlock BG] Alarm set up');
