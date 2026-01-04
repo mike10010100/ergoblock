@@ -114,7 +114,7 @@ async function renderMutes(): Promise<void> {
 async function removeItem(did: string, type: string): Promise<void> {
   const key = type === 'block' ? STORAGE_KEYS.TEMP_BLOCKS : STORAGE_KEYS.TEMP_MUTES;
   const result = await chrome.storage.sync.get(key);
-  const items = result[key] || {};
+  const items = (result[key] || {}) as Record<string, TempItem>;
 
   delete items[did];
   await chrome.storage.sync.set({ [key]: items });
