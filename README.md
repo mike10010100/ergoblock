@@ -81,7 +81,7 @@ Pre-built releases will be available on the [Releases page](https://github.com/P
 ## CI/CD and Releases
 
 This project uses GitHub Actions for automated quality control and releases:
-- **PR Checks**: Every Pull Request is checked for linting (ESLint), code formatting (Prettier), and test coverage (Vitest). All checks must pass before merging.
+- **PR Checks**: Every Pull Request is checked for linting (ESLint), code formatting (Prettier), and test coverage (Vitest). All checks must pass before merging. Detailed test coverage reports are available in the **Step Summary** of each GitHub Action run.
 - **Version Enforcement**: PRs must include a version bump in `package.json` to be merged.
 - **Auto-Release**: Merging to `main` automatically creates a GitHub Release and attaches the extension zip if the version is new.
 
