@@ -94,30 +94,24 @@ export function getSession(): BskySession | null {
 }
 
 /**
- * Make an authenticated API request
- * @param {string} endpoint - API endpoint
- * @param {string} method - HTTP method
- * @param {Object} body - Request body
- * @param {string} baseUrl - Override base URL (for PDS vs AppView)
+ * Execute an authenticated API request
+ * Shared logic for both content script (localStorage) and background (chrome.storage)
  */
-async function apiRequest<T>(
+export async function executeApiRequest<T>(
   endpoint: string,
-  method = 'GET',
-  body: unknown = null,
-  baseUrl: string | null = null
+  method: string,
+  body: unknown,
+  auth: { accessJwt: string; pdsUrl: string },
+  targetBaseUrl?: string
 ): Promise<T | null> {
-  const session = getSession();
-  if (!session) {
-    throw new Error('Not logged in to Bluesky');
-  }
-
   // Determine correct base URL:
   // - com.atproto.repo.* endpoints go to user's PDS
-  // - app.bsky.* endpoints go to public API (AppView)
-  let base = baseUrl;
+  // - app.bsky.* endpoints go to public API (AppView) unless overridden
+  let base = targetBaseUrl;
+
   if (!base) {
     if (endpoint.startsWith('com.atproto.repo.')) {
-      base = session.pdsUrl;
+      base = auth.pdsUrl;
     } else {
       base = BSKY_PUBLIC_API;
     }
@@ -136,7 +130,7 @@ async function apiRequest<T>(
   const options: RequestInit = {
     method,
     headers: {
-      Authorization: `Bearer ${session.accessJwt}`,
+      Authorization: `Bearer ${auth.accessJwt}`,
       'Content-Type': 'application/json',
     },
   };
@@ -150,12 +144,45 @@ async function apiRequest<T>(
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as { message?: string };
     console.error('[TempBlock] API error:', response.status, error);
+
+    // Throw specific error for 401 to help background worker detect auth failure
+    if (response.status === 401) {
+      throw new Error(`Auth error: ${response.status} ${error.message || ''}`);
+    }
+
     throw new Error(error.message || `API error: ${response.status}`);
   }
 
   // Some endpoints return empty responses
   const text = await response.text();
   return text ? (JSON.parse(text) as T) : null;
+}
+
+/**
+ * Make an authenticated API request (using local session)
+ * @param {string} endpoint - API endpoint
+ * @param {string} method - HTTP method
+ * @param {Object} body - Request body
+ * @param {string} baseUrl - Override base URL (for PDS vs AppView)
+ */
+async function apiRequest<T>(
+  endpoint: string,
+  method = 'GET',
+  body: unknown = null,
+  baseUrl: string | null = null
+): Promise<T | null> {
+  const session = getSession();
+  if (!session) {
+    throw new Error('Not logged in to Bluesky');
+  }
+
+  return executeApiRequest<T>(
+    endpoint,
+    method,
+    body,
+    { accessJwt: session.accessJwt, pdsUrl: session.pdsUrl },
+    baseUrl || undefined
+  );
 }
 
 /**

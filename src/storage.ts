@@ -5,11 +5,12 @@
 
 import { DEFAULT_OPTIONS, type ExtensionOptions, type HistoryEntry } from './types.js';
 
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   TEMP_BLOCKS: 'tempBlocks',
   TEMP_MUTES: 'tempMutes',
   OPTIONS: 'extensionOptions',
   ACTION_HISTORY: 'actionHistory',
+  LAST_TAB: 'lastActiveTab',
 };
 
 const HISTORY_MAX_ENTRIES = 100;

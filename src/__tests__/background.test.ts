@@ -176,7 +176,7 @@ describe('Background Service Worker', () => {
   });
 
   it('should mark auth invalid on 401 error', async () => {
-    const { apiRequest } = await import('../background.js');
+    const { unblockUser } = await import('../background.js');
 
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
@@ -185,7 +185,7 @@ describe('Background Service Worker', () => {
     });
 
     try {
-      await apiRequest('test', 'GET', null, 'token', 'https://pds.com');
+      await unblockUser('did:target:456', 'token', 'owner', 'https://pds.com');
     } catch (_e) {
       // Expected
     }

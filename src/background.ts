@@ -1,3 +1,4 @@
+import { executeApiRequest } from './api.js';
 import {
   getTempBlocks,
   getTempMutes,
@@ -21,46 +22,52 @@ async function getAuthToken(): Promise<AuthData | null> {
   return (result.authToken as AuthData) || null;
 }
 
-export async function apiRequest<T>(
+/**
+ * Wrapper for API requests that handles auth status updates
+ */
+async function bgApiRequest<T>(
   endpoint: string,
   method: string,
-  body: Record<string, unknown> | null,
+  body: unknown,
   token: string,
   pdsUrl: string
 ): Promise<T | null> {
-  const baseUrl = pdsUrl || 'https://bsky.social';
-  const url = `${baseUrl}/xrpc/${endpoint}`;
-  console.log('[ErgoBlock BG] API request:', method, url);
+  try {
+    // Pass pdsUrl as targetBaseUrl if it's a repo operation, otherwise let executeApiRequest decide
+    // Actually executeApiRequest logic is: "if repo.* use auth.pdsUrl, else Public"
+    // But unmuteUser needs PDS.
 
-  const options: RequestInit = {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
+    // If we pass pdsUrl as the 5th arg (targetBaseUrl), it forces that URL.
+    // Logic in background.ts unblockUser:
+    // 1. listRecords (repo operation) -> needs PDS? No, listRecords can go to AppView usually, but PDS is safer for freshness.
+    // 2. deleteRecord (repo op) -> needs PDS.
 
-  if (body) {
-    options.body = JSON.stringify(body);
-  }
+    // Logic in background.ts unmuteUser:
+    // 1. unmuteActor -> needs PDS.
 
-  const response = await fetch(url, options);
+    // So for background operations (which are all writes or reading own repo), we almost always want PDS.
 
-  if (!response.ok) {
-    if (response.status === 401) {
+    const result = await executeApiRequest<T>(
+      endpoint,
+      method,
+      body,
+      { accessJwt: token, pdsUrl },
+      pdsUrl // Force PDS for background operations to ensure write consistency
+    );
+
+    // If request was successful, ensure status is valid
+    await chrome.storage.local.set({ authStatus: 'valid' });
+    return result;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('401') || error.message.includes('Auth error'))
+    ) {
       console.error('[ErgoBlock BG] Auth failed (401), marking session invalid');
       await chrome.storage.local.set({ authStatus: 'invalid' });
     }
-    const error = (await response.json().catch(() => ({}))) as { message?: string };
-    console.error('[ErgoBlock BG] API error:', response.status, error);
-    throw new Error(error.message || `API error: ${response.status}`);
+    throw error;
   }
-
-  // If request was successful, ensure status is valid
-  await chrome.storage.local.set({ authStatus: 'valid' });
-
-  const text = await response.text();
-  return text ? (JSON.parse(text) as T) : null;
 }
 
 export async function unblockUser(
@@ -69,7 +76,7 @@ export async function unblockUser(
   ownerDid: string,
   pdsUrl: string
 ): Promise<boolean> {
-  const blocks = await apiRequest<ListRecordsResponse>(
+  const blocks = await bgApiRequest<ListRecordsResponse>(
     `com.atproto.repo.listRecords?repo=${ownerDid}&collection=app.bsky.graph.block&limit=100`,
     'GET',
     null,
@@ -84,7 +91,7 @@ export async function unblockUser(
   }
 
   const rkey = blockRecord.uri.split('/').pop();
-  await apiRequest(
+  await bgApiRequest(
     'com.atproto.repo.deleteRecord',
     'POST',
     {
@@ -100,7 +107,7 @@ export async function unblockUser(
 }
 
 export async function unmuteUser(did: string, token: string, pdsUrl: string): Promise<boolean> {
-  await apiRequest('app.bsky.graph.unmuteActor', 'POST', { actor: did }, token, pdsUrl);
+  await bgApiRequest('app.bsky.graph.unmuteActor', 'POST', { actor: did }, token, pdsUrl);
   return true;
 }
 
@@ -165,7 +172,6 @@ export async function checkExpirations(): Promise<void> {
 
   // Check expired blocks
   const blocks = await getTempBlocks();
-  const expiredBlocks: Array<{ did: string; handle: string }> = [];
 
   for (const [did, data] of Object.entries(blocks)) {
     if (data.expiresAt <= now) {
@@ -183,13 +189,15 @@ export async function checkExpirations(): Promise<void> {
           duration: data.createdAt ? Date.now() - data.createdAt : undefined,
         });
         console.log('[ErgoBlock BG] Successfully unblocked:', data.handle);
-        expiredBlocks.push({ did, handle: data.handle });
         await sendNotification('expired_success', data.handle, 'block');
       } catch (error) {
         console.error('[ErgoBlock BG] Failed to unblock:', data.handle, error);
 
         // If it's an auth error, we stop processing further entries
-        if (error instanceof Error && error.message.includes('401')) {
+        if (
+          error instanceof Error &&
+          (error.message.includes('401') || error.message.includes('Auth error'))
+        ) {
           return;
         }
 
@@ -214,7 +222,6 @@ export async function checkExpirations(): Promise<void> {
 
   // Check expired mutes
   const mutes = await getTempMutes();
-  const expiredMutes: Array<{ did: string; handle: string }> = [];
 
   for (const [did, data] of Object.entries(mutes)) {
     if (data.expiresAt <= now) {
@@ -232,13 +239,15 @@ export async function checkExpirations(): Promise<void> {
           duration: data.createdAt ? Date.now() - data.createdAt : undefined,
         });
         console.log('[ErgoBlock BG] Successfully unmuted:', data.handle);
-        expiredMutes.push({ did, handle: data.handle });
         await sendNotification('expired_success', data.handle, 'mute');
       } catch (error) {
         console.error('[ErgoBlock BG] Failed to unmute:', data.handle, error);
 
         // If it's an auth error, we stop processing further entries
-        if (error instanceof Error && error.message.includes('401')) {
+        if (
+          error instanceof Error &&
+          (error.message.includes('401') || error.message.includes('Auth error'))
+        ) {
           return;
         }
 
