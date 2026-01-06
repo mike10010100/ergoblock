@@ -1,9 +1,8 @@
 /**
  * Screenshot capture utility for ErgoBlock
- * Captures post context when blocking/muting from a post
+ * Uses chrome.tabs.captureVisibleTab via background script for reliable capture
  */
 
-import html2canvas from 'html2canvas';
 import type { ScreenshotData } from './types.js';
 import { addScreenshot, getOptions } from './storage.js';
 
@@ -27,28 +26,6 @@ export function findPostContainer(element: HTMLElement | null): HTMLElement | nu
   }
 
   return null;
-}
-
-/**
- * Find parent thread posts for context (up to 3 parents)
- */
-export function findThreadContext(postContainer: HTMLElement): HTMLElement[] {
-  const parents: HTMLElement[] = [];
-
-  // Look for parent posts in thread view
-  // Thread structure varies, but typically parents are siblings above
-  let sibling = postContainer.previousElementSibling;
-  while (sibling && parents.length < 3) {
-    for (const selector of POST_SELECTORS) {
-      if (sibling.matches(selector)) {
-        parents.unshift(sibling as HTMLElement);
-        break;
-      }
-    }
-    sibling = sibling.previousElementSibling;
-  }
-
-  return parents;
 }
 
 /**
@@ -90,7 +67,28 @@ function generateScreenshotId(): string {
 }
 
 /**
- * Capture a screenshot of the post and optionally its thread context
+ * Request screenshot capture from background script
+ */
+async function requestScreenshotFromBackground(): Promise<string | null> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: 'CAPTURE_SCREENSHOT' }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn('[ErgoBlock] Screenshot request failed:', chrome.runtime.lastError);
+        resolve(null);
+        return;
+      }
+      if (response?.success && response.imageData) {
+        resolve(response.imageData);
+      } else {
+        console.warn('[ErgoBlock] Screenshot capture failed:', response?.error);
+        resolve(null);
+      }
+    });
+  });
+}
+
+/**
+ * Capture a screenshot of the visible tab when blocking/muting from a post
  */
 export async function capturePostScreenshot(
   postContainer: HTMLElement,
@@ -107,52 +105,17 @@ export async function capturePostScreenshot(
   }
 
   try {
-    // Find thread context (parent posts)
-    const threadContext = findThreadContext(postContainer);
-    const elementsToCapture = [...threadContext, postContainer];
+    console.log('[ErgoBlock] Requesting screenshot capture...');
 
-    console.log(`[ErgoBlock] Capturing screenshot with ${elementsToCapture.length} post(s)`);
+    // Request screenshot from background script
+    const imageData = await requestScreenshotFromBackground();
 
-    // Create a temporary container for capturing
-    const tempWrapper = document.createElement('div');
-    tempWrapper.style.cssText = `
-      position: fixed;
-      left: -9999px;
-      top: 0;
-      background: white;
-      padding: 16px;
-      max-width: 600px;
-    `;
-
-    // Clone elements into temp wrapper
-    for (const el of elementsToCapture) {
-      const clone = el.cloneNode(true) as HTMLElement;
-      clone.style.marginBottom = '8px';
-      // Remove any interactive elements that might cause issues
-      clone.querySelectorAll('button, [role="button"]').forEach((btn) => {
-        (btn as HTMLElement).style.pointerEvents = 'none';
-      });
-      tempWrapper.appendChild(clone);
+    if (!imageData) {
+      console.warn('[ErgoBlock] No screenshot data received');
+      return null;
     }
 
-    document.body.appendChild(tempWrapper);
-
-    // Capture with html2canvas
-    const canvas = await html2canvas(tempWrapper, {
-      useCORS: true,
-      allowTaint: true,
-      scale: 1, // 1:1 scale to reduce size
-      logging: false,
-      backgroundColor: '#ffffff',
-    });
-
-    // Clean up temp wrapper
-    document.body.removeChild(tempWrapper);
-
-    // Convert to JPEG with quality setting
-    const imageData = canvas.toDataURL('image/jpeg', options.screenshotQuality);
-
-    // Extract metadata
+    // Extract metadata from the post
     const postText = extractPostText(postContainer);
     const postUrl = extractPostUrl(postContainer);
 

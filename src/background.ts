@@ -308,14 +308,52 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
+/**
+ * Capture screenshot of the active tab
+ */
+async function captureTabScreenshot(): Promise<string | null> {
+  try {
+    const options = await getOptions();
+
+    // Get the active tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      console.warn('[ErgoBlock BG] No active tab found');
+      return null;
+    }
+
+    // Capture the visible area of the tab
+    // Quality is mapped from 0-1 to 0-100 for JPEG
+    const quality = Math.round(options.screenshotQuality * 100);
+    const imageData = await chrome.tabs.captureVisibleTab(tab.windowId, {
+      format: 'jpeg',
+      quality,
+    });
+
+    console.log('[ErgoBlock BG] Screenshot captured, size:', imageData.length);
+    return imageData;
+  } catch (error) {
+    console.error('[ErgoBlock BG] Screenshot capture failed:', error);
+    return null;
+  }
+}
+
 // Listen for messages from content script
 interface ExtensionMessage {
   type: string;
   auth?: AuthData;
 }
 
+interface ScreenshotResponse {
+  success: boolean;
+  imageData?: string;
+  error?: string;
+}
+
+type MessageResponse = { success: boolean } | ScreenshotResponse;
+
 chrome.runtime.onMessage.addListener(
-  (message: ExtensionMessage, _sender, sendResponse: (response: { success: boolean }) => void) => {
+  (message: ExtensionMessage, _sender, sendResponse: (response: MessageResponse) => void) => {
     console.log('[ErgoBlock BG] Received message:', message.type);
 
     if (message.type === 'TEMP_BLOCK_ADDED' || message.type === 'TEMP_MUTE_ADDED') {
@@ -330,6 +368,17 @@ chrome.runtime.onMessage.addListener(
 
     if (message.type === 'CHECK_NOW') {
       checkExpirations().then(() => sendResponse({ success: true }));
+      return true; // Indicates async response
+    }
+
+    if (message.type === 'CAPTURE_SCREENSHOT') {
+      captureTabScreenshot().then((imageData) => {
+        if (imageData) {
+          sendResponse({ success: true, imageData });
+        } else {
+          sendResponse({ success: false, error: 'Failed to capture screenshot' });
+        }
+      });
       return true; // Indicates async response
     }
 
