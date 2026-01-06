@@ -108,29 +108,30 @@ export async function capturePostContext(
     return null;
   }
 
-  if (!postContainer) {
-    console.log('[ErgoBlock] No post container provided');
-    return null;
-  }
-
   try {
-    const postUri = extractPostUri(postContainer);
+    // Try to extract post info if we have a container
+    let postUri: string | null = null;
+    let postText: string | undefined;
+    let postAuthorHandle: string | undefined;
+    let postAuthorDid = '';
 
-    if (!postUri) {
-      console.log('[ErgoBlock] Could not extract post URI');
-      return null;
+    if (postContainer) {
+      postUri = extractPostUri(postContainer);
+      postText = extractPostText(postContainer);
+      postAuthorHandle = extractPostAuthorHandle(postContainer);
+
+      if (postUri) {
+        // Extract DID from URI if possible (it might be a handle)
+        const uriParts = postUri.split('/');
+        postAuthorDid = uriParts[2] || '';
+      }
     }
 
-    const postText = extractPostText(postContainer);
-    const postAuthorHandle = extractPostAuthorHandle(postContainer);
-
-    // Extract DID from URI if possible (it might be a handle)
-    const uriParts = postUri.split('/');
-    const postAuthorDid = uriParts[2] || '';
-
+    // Always save context, even without a post URI
+    // This happens when blocking from a profile page or when URI extraction fails
     const context: PostContext = {
       id: generateContextId(),
-      postUri,
+      postUri: postUri || '', // Empty string if no URI found
       postAuthorDid,
       postAuthorHandle,
       postText,
@@ -142,7 +143,7 @@ export async function capturePostContext(
     };
 
     await addPostContext(context);
-    console.log('[ErgoBlock] Post context saved:', context.id, postUri);
+    console.log('[ErgoBlock] Post context saved:', context.id, postUri || '(no post URI)');
 
     return context;
   } catch (error) {
