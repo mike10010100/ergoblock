@@ -10,6 +10,7 @@ import { addPostContext, getOptions } from './storage.js';
 const POST_SELECTORS = [
   '[data-testid*="feedItem"]',
   '[data-testid*="postThreadItem"]',
+  '[data-testid*="notification"]', // Notification items
   'article',
   '[data-testid*="post"]',
 ];
@@ -22,7 +23,9 @@ export function findPostContainer(element: HTMLElement | null): HTMLElement | nu
 
   for (const selector of POST_SELECTORS) {
     const container = element.closest(selector);
-    if (container) return container as HTMLElement;
+    if (container) {
+      return container as HTMLElement;
+    }
   }
 
   return null;
@@ -42,11 +45,46 @@ function extractPostUri(postContainer: HTMLElement): string | null {
     const match = href.match(/\/profile\/([^/]+)\/post\/([^/?#]+)/);
     if (match) {
       const [, handle, rkey] = match;
-      // We need to resolve the handle to a DID, but for now store the handle
-      // The URI format is at://did/app.bsky.feed.post/rkey
-      // We'll use handle as placeholder and resolve later if needed
       return `at://${handle}/app.bsky.feed.post/${rkey}`;
     }
+  }
+
+  // If no /post/ links found, try profile links that might include post paths
+  const profileLinks = postContainer.querySelectorAll('a[href*="/profile/"]');
+  for (const link of profileLinks) {
+    const href = (link as HTMLAnchorElement).href;
+    const match = href.match(/\/profile\/([^/]+)\/post\/([^/?#]+)/);
+    if (match) {
+      const [, handle, rkey] = match;
+      return `at://${handle}/app.bsky.feed.post/${rkey}`;
+    }
+  }
+
+  // Check parent elements for notification items
+  let parent = postContainer.parentElement;
+  let attempts = 0;
+  while (parent && attempts < 5) {
+    const parentLinks = parent.querySelectorAll('a[href*="/post/"]');
+    if (parentLinks.length > 0) {
+      for (const link of parentLinks) {
+        const href = (link as HTMLAnchorElement).href;
+        const match = href.match(/\/profile\/([^/]+)\/post\/([^/?#]+)/);
+        if (match) {
+          const [, handle, rkey] = match;
+          return `at://${handle}/app.bsky.feed.post/${rkey}`;
+        }
+      }
+    }
+    parent = parent.parentElement;
+    attempts++;
+  }
+
+  // Last resort: check if we're currently on a post page
+  const currentUrl = window.location.href;
+  const urlMatch = currentUrl.match(/\/profile\/([^/]+)\/post\/([^/?#]+)/);
+  if (urlMatch) {
+    const [, handle, rkey] = urlMatch;
+    return `at://${handle}/app.bsky.feed.post/${rkey}`;
   }
 
   return null;
@@ -104,7 +142,6 @@ export async function capturePostContext(
   const options = await getOptions();
 
   if (!options.savePostContext) {
-    console.log('[ErgoBlock] Post context saving disabled');
     return null;
   }
 
@@ -143,14 +180,6 @@ export async function capturePostContext(
     };
 
     await addPostContext(context);
-    console.log('[ErgoBlock] Post context saved:', {
-      id: context.id,
-      targetHandle: context.targetHandle,
-      targetDid: context.targetDid,
-      actionType: context.actionType,
-      postUri: postUri || '(none)',
-    });
-
     return context;
   } catch (error) {
     console.error('[ErgoBlock] Failed to capture post context:', error);

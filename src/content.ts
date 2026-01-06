@@ -35,12 +35,37 @@ document.addEventListener(
   'click',
   (e) => {
     lastClickedElement = e.target as HTMLElement;
-    // Try to find post container immediately on every click
-    // This captures it BEFORE any menu appears
+    const target = e.target as HTMLElement;
+
+    // Don't update post container if clicking on menu items or our own UI
+    // These are the dropdown options that appear AFTER the menu opens
+    const isMenuItem = target.closest('[role="menuitem"]');
+    const isMenu = target.closest('[role="menu"]');
+    const isOurPicker = target.closest('.ergo-duration-picker');
+
+    if (isMenuItem || isMenu || isOurPicker) {
+      return;
+    }
+
+    // Try to find post container from the clicked element
+    // The three-dot menu button IS inside the post, so we want to capture from it
     const container = findPostContainer(lastClickedElement);
     if (container) {
-      lastClickedPostContainer = container;
-      console.log('[ErgoBlock] Stored post container from click');
+      // Check if this is a real post container (feedItem, postThreadItem, etc.)
+      // not something like postDropdownBtn or postDropdownMuteBtn
+      const testid = container.dataset?.testid || '';
+
+      // Real post containers start with feedItem- or postThreadItem-, or are articles
+      // Menu buttons have testids like postDropdownBtn, postDropdownMuteBtn
+      const isRealPost =
+        testid.startsWith('feedItem-') ||
+        testid.startsWith('postThreadItem-') ||
+        testid.includes('notification') ||
+        container.tagName === 'ARTICLE';
+
+      if (isRealPost) {
+        lastClickedPostContainer = container;
+      }
     }
   },
   true
@@ -336,11 +361,9 @@ async function handleTempBlock(
   durationMs: number,
   durationLabel: string
 ): Promise<void> {
-  console.log('[ErgoBlock] handleTempBlock called for:', handle, 'duration:', durationLabel);
   try {
     // Use the post container captured when menu was intercepted
     const postContainer = capturedPostContainer;
-    console.log('[ErgoBlock] Using captured post container:', !!postContainer);
 
     // Get the user's DID from their profile
     const profile = await getProfile(handle);
@@ -385,11 +408,9 @@ async function handleTempMute(
   durationMs: number,
   durationLabel: string
 ): Promise<void> {
-  console.log('[ErgoBlock] handleTempMute called for:', handle, 'duration:', durationLabel);
   try {
     // Use the post container captured when menu was intercepted
     const postContainer = capturedPostContainer;
-    console.log('[ErgoBlock] Using captured post container:', !!postContainer);
 
     // Get the user's DID from their profile
     const profile = await getProfile(handle);
@@ -420,11 +441,9 @@ async function handleTempMute(
  * Handle permanent block/mute action (no expiration tracking)
  */
 async function handlePermanentAction(actionType: 'block' | 'mute', handle: string): Promise<void> {
-  console.log('[ErgoBlock] handlePermanentAction called for:', handle, 'action:', actionType);
   try {
     // Use the post container captured when menu was intercepted
     const postContainer = capturedPostContainer;
-    console.log('[ErgoBlock] Using captured post container:', !!postContainer);
 
     // Get the user's DID from their profile
     const profile = await getProfile(handle);
@@ -472,7 +491,6 @@ function interceptMenuItem(item: HTMLElement, actionType: 'block' | 'mute', hand
       // Use the post container captured when the user clicked the three-dot menu
       // (captured in the global click handler before the menu appeared)
       capturedPostContainer = lastClickedPostContainer;
-      console.log('[ErgoBlock] Using post container from earlier click:', !!capturedPostContainer);
 
       closeMenus();
       showDurationPicker(actionType, handle);
@@ -508,7 +526,6 @@ function injectMenuItems(menu: Element): void {
   }
 
   if (!userInfo?.handle) {
-    console.log('[ErgoBlock] Could not determine user for menu');
     return;
   }
 
@@ -522,13 +539,11 @@ function injectMenuItems(menu: Element): void {
     // Intercept "Block Account" (but not "Unblock")
     if (text.includes('block') && !text.includes('unblock')) {
       interceptMenuItem(item as HTMLElement, 'block', handle);
-      console.log('[ErgoBlock] Intercepted Block menu item for', handle);
     }
 
     // Intercept "Mute Account" (but not "Unmute")
     if (text.includes('mute') && !text.includes('unmute')) {
       interceptMenuItem(item as HTMLElement, 'mute', handle);
-      console.log('[ErgoBlock] Intercepted Mute menu item for', handle);
     }
   }
 }
