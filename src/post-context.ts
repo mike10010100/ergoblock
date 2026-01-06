@@ -143,7 +143,13 @@ export async function capturePostContext(
     };
 
     await addPostContext(context);
-    console.log('[ErgoBlock] Post context saved:', context.id, postUri || '(no post URI)');
+    console.log('[ErgoBlock] Post context saved:', {
+      id: context.id,
+      targetHandle: context.targetHandle,
+      targetDid: context.targetDid,
+      actionType: context.actionType,
+      postUri: postUri || '(none)',
+    });
 
     return context;
   } catch (error) {
