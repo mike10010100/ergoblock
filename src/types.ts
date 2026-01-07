@@ -100,6 +100,26 @@ export interface Profile {
 }
 
 /**
+ * Viewer state from profile - relationship between logged-in user and the profile
+ */
+export interface ProfileViewerState {
+  muted?: boolean;
+  blockedBy?: boolean;
+  blocking?: string; // URI of the block record if blocking
+  following?: string; // URI of the follow record if following
+  followedBy?: string; // URI of follow record if they follow us
+}
+
+/**
+ * Extended profile with viewer state
+ */
+export interface ProfileWithViewer extends Profile {
+  displayName?: string;
+  avatar?: string;
+  viewer?: ProfileViewerState;
+}
+
+/**
  * Profile view returned from Bluesky API (getBlocks, getMutes)
  */
 export interface ProfileView {
@@ -135,7 +155,12 @@ export interface PermanentBlockMute {
   handle: string;
   displayName?: string;
   avatar?: string;
-  syncedAt: number;
+  createdAt?: number; // Actual block creation time (from record)
+  syncedAt: number; // When we synced this entry
+  rkey?: string; // Record key for direct deletion
+  mutualBlock?: boolean; // True if user has also blocked us back
+  // Relationship state (from getProfiles viewer)
+  viewer?: ProfileViewerState;
 }
 
 /**
@@ -152,6 +177,9 @@ export interface ManagedEntry {
   createdAt?: number;
   syncedAt?: number;
   rkey?: string;
+  mutualBlock?: boolean; // True if user has also blocked us back
+  // Relationship indicators (fetched on demand)
+  viewer?: ProfileViewerState;
 }
 
 /**
@@ -174,9 +202,90 @@ export interface PostContext {
   postAuthorDid: string;
   postAuthorHandle?: string;
   postText?: string; // Cached text at time of action
+  postCreatedAt?: number; // When the post was created (ms timestamp)
   targetHandle: string; // Who was blocked/muted
   targetDid: string;
   actionType: 'block' | 'mute';
   permanent: boolean;
-  timestamp: number;
+  timestamp: number; // When the block/mute action occurred
+  guessed?: boolean; // True if auto-detected from interactions, not captured during block
+}
+
+/**
+ * Block record from com.atproto.repo.listRecords
+ */
+export interface BlockRecord {
+  uri: string;
+  cid: string;
+  value: {
+    $type: 'app.bsky.graph.block';
+    subject: string; // DID of blocked user
+    createdAt: string; // ISO timestamp
+  };
+}
+
+/**
+ * Response from com.atproto.repo.listRecords for blocks
+ */
+export interface ListBlockRecordsResponse {
+  records: BlockRecord[];
+  cursor?: string;
+}
+
+/**
+ * Feed post from app.bsky.feed.getAuthorFeed
+ */
+export interface FeedPost {
+  uri: string;
+  cid: string;
+  author: { did: string; handle: string };
+  record: {
+    text: string;
+    createdAt: string;
+    reply?: { parent: { uri: string }; root?: { uri: string } };
+    embed?: { $type: string; record?: { uri: string } };
+  };
+}
+
+/**
+ * Response from app.bsky.feed.getAuthorFeed
+ */
+export interface GetAuthorFeedResponse {
+  feed: Array<{ post: FeedPost }>;
+  cursor?: string;
+}
+
+/**
+ * DID document from PLC directory
+ */
+export interface DidDocument {
+  id: string;
+  service?: Array<{
+    id: string;
+    type: string;
+    serviceEndpoint: string;
+  }>;
+}
+
+/**
+ * Raw post record from com.atproto.repo.listRecords
+ */
+export interface RawPostRecord {
+  uri: string;
+  cid: string;
+  value: {
+    $type: 'app.bsky.feed.post';
+    text: string;
+    createdAt: string;
+    reply?: { parent: { uri: string }; root?: { uri: string } };
+    embed?: { $type: string; record?: { uri: string } };
+  };
+}
+
+/**
+ * Response from com.atproto.repo.listRecords for posts
+ */
+export interface ListPostRecordsResponse {
+  records: RawPostRecord[];
+  cursor?: string;
 }

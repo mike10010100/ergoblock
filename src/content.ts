@@ -618,16 +618,22 @@ function observeMenus(): void {
 function syncAuthToBackground(): void {
   const session = getSession();
   if (session?.accessJwt && session?.did && session?.pdsUrl) {
-    browser.runtime.sendMessage({
-      type: 'SET_AUTH_TOKEN',
-      auth: {
-        accessJwt: session.accessJwt,
-        did: session.did,
-        pdsUrl: session.pdsUrl,
-      },
-    });
-    browser.storage.local.set({ authStatus: 'valid' });
-    console.log('[TempBlock] Auth synced to background (PDS:', session.pdsUrl, ')');
+    try {
+      browser.runtime.sendMessage({
+        type: 'SET_AUTH_TOKEN',
+        auth: {
+          accessJwt: session.accessJwt,
+          did: session.did,
+          pdsUrl: session.pdsUrl,
+        },
+      });
+      browser.storage.local.set({ authStatus: 'valid' });
+      console.log('[TempBlock] Auth synced to background (PDS:', session.pdsUrl, ')');
+    } catch (_error) {
+      // Extension context invalidated (extension was reloaded)
+      // This is expected - the page will get a fresh content script on next navigation
+      console.log('[TempBlock] Extension context invalidated, skipping auth sync');
+    }
   }
 }
 

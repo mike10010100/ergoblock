@@ -1,13 +1,32 @@
-// Popup script for Bluesky Temp Block & Mute
+// Popup script for ErgoBlock - Simplified view with manager link
 
 import browser from './browser.js';
-import { STORAGE_KEYS, getPostContexts, deletePostContext } from './storage.js';
-import type { PostContext } from './types.js';
+import {
+  STORAGE_KEYS,
+  getTempBlocks,
+  getTempMutes,
+  getPermanentBlocks,
+  getPermanentMutes,
+  getActionHistory,
+  getSyncState,
+} from './storage.js';
+import type { HistoryEntry } from './types.js';
 
 interface TempItem {
   handle: string;
   expiresAt: number;
+  createdAt: number;
 }
+
+interface CombinedItem {
+  did: string;
+  handle: string;
+  expiresAt: number;
+  createdAt: number;
+  type: 'block' | 'mute';
+}
+
+const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
 /**
  * Format remaining time
@@ -24,142 +43,9 @@ function formatTimeRemaining(expiresAt: number): string {
   const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
 
   if (hours > 0) {
-    return `${hours}h ${minutes}m remaining`;
+    return `${hours}h ${minutes}m`;
   }
-  return `${minutes}m remaining`;
-}
-
-/**
- * Create an item element
- */
-function createItemElement(did: string, data: TempItem, type: string): HTMLElement {
-  const item = document.createElement('div');
-  item.className = 'item';
-
-  const info = document.createElement('div');
-  info.className = 'item-info';
-
-  const handleDiv = document.createElement('div');
-  handleDiv.className = 'item-handle';
-  handleDiv.textContent = `@${data.handle}`;
-
-  const timeDiv = document.createElement('div');
-  timeDiv.className = 'item-time';
-  timeDiv.textContent = formatTimeRemaining(data.expiresAt);
-
-  info.appendChild(handleDiv);
-  info.appendChild(timeDiv);
-
-  const actions = document.createElement('div');
-  actions.className = 'item-actions';
-
-  const btn = document.createElement('button');
-  btn.className = 'btn btn-remove';
-  btn.dataset.did = did;
-  btn.dataset.type = type;
-  btn.textContent = 'Remove';
-
-  actions.appendChild(btn);
-
-  item.appendChild(info);
-  item.appendChild(actions);
-
-  return item;
-}
-
-/**
- * Render the blocks list
- */
-async function renderBlocks(): Promise<void> {
-  const list = document.getElementById('blocks-list');
-  if (!list) return;
-
-  const result = await browser.storage.sync.get(STORAGE_KEYS.TEMP_BLOCKS);
-  const blocks = (result[STORAGE_KEYS.TEMP_BLOCKS] || {}) as Record<string, TempItem>;
-
-  const entries = Object.entries(blocks);
-
-  if (entries.length === 0) {
-    list.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">🚫</div>
-        <div>No temporary blocks</div>
-      </div>
-    `;
-    return;
-  }
-
-  list.innerHTML = '';
-  for (const [did, data] of entries) {
-    list.appendChild(createItemElement(did, data, 'block'));
-  }
-}
-
-/**
- * Render the mutes list
- */
-async function renderMutes(): Promise<void> {
-  const list = document.getElementById('mutes-list');
-  if (!list) return;
-
-  const result = await browser.storage.sync.get(STORAGE_KEYS.TEMP_MUTES);
-  const mutes = (result[STORAGE_KEYS.TEMP_MUTES] || {}) as Record<string, TempItem>;
-
-  const entries = Object.entries(mutes);
-
-  if (entries.length === 0) {
-    list.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">🔇</div>
-        <div>No temporary mutes</div>
-      </div>
-    `;
-    return;
-  }
-
-  list.innerHTML = '';
-  for (const [did, data] of entries) {
-    list.appendChild(createItemElement(did, data, 'mute'));
-  }
-}
-
-/**
- * Remove a temp block or mute and unblock/unmute via API
- */
-async function removeItem(did: string, type: string): Promise<void> {
-  updateStatus(type === 'block' ? 'Unblocking...' : 'Unmuting...');
-
-  try {
-    // Send message to background to unblock/unmute via API
-    const response = (await browser.runtime.sendMessage({
-      type: type === 'block' ? 'UNBLOCK_USER' : 'UNMUTE_USER',
-      did,
-    })) as { success: boolean; error?: string };
-
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to process request');
-    }
-
-    // Remove from storage
-    const key = type === 'block' ? STORAGE_KEYS.TEMP_BLOCKS : STORAGE_KEYS.TEMP_MUTES;
-    const result = await browser.storage.sync.get(key);
-    const items = (result[key] || {}) as Record<string, TempItem>;
-
-    delete items[did];
-    await browser.storage.sync.set({ [key]: items });
-
-    // Re-render
-    if (type === 'block') {
-      renderBlocks();
-    } else {
-      renderMutes();
-    }
-
-    updateStatus(type === 'block' ? 'User unblocked!' : 'User unmuted!');
-  } catch (error) {
-    console.error('[ErgoBlock Popup] Remove failed:', error);
-    updateStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  return `${minutes}m`;
 }
 
 /**
@@ -180,127 +66,254 @@ function formatTimestamp(timestamp: number): string {
 }
 
 /**
- * Create a post context item element
+ * Create an item element for expiring soon list
  */
-function createContextElement(context: PostContext): HTMLElement {
-  const item = document.createElement('div');
-  item.className = 'context-item';
+function createExpiringItem(item: CombinedItem): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'item';
 
-  const header = document.createElement('div');
-  header.className = 'context-header';
+  const info = document.createElement('div');
+  info.className = 'item-info';
 
-  const meta = document.createElement('div');
-  meta.className = 'context-meta';
+  const handleDiv = document.createElement('div');
+  handleDiv.className = 'item-handle';
+  handleDiv.textContent = `@${item.handle}`;
 
-  const targetHandle = document.createElement('span');
-  targetHandle.className = 'context-target';
-  targetHandle.textContent = `@${context.targetHandle}`;
+  const metaDiv = document.createElement('div');
+  metaDiv.className = 'item-meta';
 
-  const action = document.createElement('span');
-  action.className = `context-action ${context.actionType}`;
-  const actionText = context.permanent ? 'permanent ' : 'temp ';
-  action.textContent = `(${actionText}${context.actionType})`;
+  const typeSpan = document.createElement('span');
+  typeSpan.className = `item-type ${item.type}`;
+  typeSpan.textContent = item.type;
 
-  const time = document.createElement('div');
-  time.className = 'context-time';
-  time.textContent = formatTimestamp(context.timestamp);
+  const timeSpan = document.createElement('span');
+  timeSpan.textContent = formatTimeRemaining(item.expiresAt);
 
-  meta.appendChild(targetHandle);
-  meta.appendChild(action);
-  meta.appendChild(time);
+  metaDiv.appendChild(typeSpan);
+  metaDiv.appendChild(timeSpan);
 
-  const deleteBtn = document.createElement('button');
-  deleteBtn.className = 'btn btn-delete';
-  deleteBtn.textContent = 'Delete';
-  deleteBtn.dataset.contextId = context.id;
+  info.appendChild(handleDiv);
+  info.appendChild(metaDiv);
 
-  header.appendChild(meta);
-  header.appendChild(deleteBtn);
+  const actions = document.createElement('div');
+  actions.className = 'item-actions';
 
-  item.appendChild(header);
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-remove';
+  btn.dataset.did = item.did;
+  btn.dataset.type = item.type;
+  btn.textContent = 'Remove';
 
-  // Show post text if available
-  if (context.postText) {
-    const text = document.createElement('div');
-    text.className = 'context-text';
-    text.textContent = `"${context.postText}"`;
-    item.appendChild(text);
-  }
+  actions.appendChild(btn);
 
-  // Show link to post
-  if (context.postUri) {
-    const linkContainer = document.createElement('div');
-    linkContainer.className = 'context-link';
+  el.appendChild(info);
+  el.appendChild(actions);
 
-    // Convert at:// URI to bsky.app URL
-    // Format: at://handle/app.bsky.feed.post/rkey -> bsky.app/profile/handle/post/rkey
-    const match = context.postUri.match(/at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/?#]+)/);
-    if (match) {
-      const [, handle, rkey] = match;
-      const link = document.createElement('a');
-      link.href = `https://bsky.app/profile/${handle}/post/${rkey}`;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.textContent = 'View post';
-      link.className = 'post-link';
-      linkContainer.appendChild(link);
-    }
-
-    item.appendChild(linkContainer);
-  }
-
-  return item;
+  return el;
 }
 
 /**
- * Render the history/context list
+ * Create an item element for recent activity list
  */
-async function renderHistory(): Promise<void> {
-  const list = document.getElementById('history-list');
+function createRecentItem(entry: HistoryEntry): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'item';
+
+  const info = document.createElement('div');
+  info.className = 'item-info';
+
+  const handleDiv = document.createElement('div');
+  handleDiv.className = 'item-handle';
+  handleDiv.textContent = `@${entry.handle}`;
+
+  const metaDiv = document.createElement('div');
+  metaDiv.className = 'item-meta';
+
+  const actionType = entry.action.includes('block') ? 'block' : 'mute';
+  const typeSpan = document.createElement('span');
+  typeSpan.className = `item-type ${actionType}`;
+  typeSpan.textContent = entry.action;
+
+  const timeSpan = document.createElement('span');
+  timeSpan.textContent = formatTimestamp(entry.timestamp);
+
+  metaDiv.appendChild(typeSpan);
+  metaDiv.appendChild(timeSpan);
+
+  info.appendChild(handleDiv);
+  info.appendChild(metaDiv);
+
+  el.appendChild(info);
+
+  return el;
+}
+
+/**
+ * Load and render stats
+ */
+async function renderStats(): Promise<void> {
+  const [tempBlocks, tempMutes, permBlocks, permMutes] = await Promise.all([
+    getTempBlocks(),
+    getTempMutes(),
+    getPermanentBlocks(),
+    getPermanentMutes(),
+  ]);
+
+  // Total counts = temp + permanent (permanent excludes temp)
+  const blockCount = Object.keys(tempBlocks).length + Object.keys(permBlocks).length;
+  const muteCount = Object.keys(tempMutes).length + Object.keys(permMutes).length;
+
+  // Count expiring in 24h (only temp blocks/mutes have expiration)
+  const now = Date.now();
+  let expiringCount = 0;
+
+  for (const data of Object.values(tempBlocks)) {
+    if (data.expiresAt - now <= TWENTY_FOUR_HOURS && data.expiresAt > now) {
+      expiringCount++;
+    }
+  }
+  for (const data of Object.values(tempMutes)) {
+    if (data.expiresAt - now <= TWENTY_FOUR_HOURS && data.expiresAt > now) {
+      expiringCount++;
+    }
+  }
+
+  const statBlocks = document.getElementById('stat-blocks');
+  const statMutes = document.getElementById('stat-mutes');
+  const statExpiring = document.getElementById('stat-expiring');
+
+  if (statBlocks) statBlocks.textContent = String(blockCount);
+  if (statMutes) statMutes.textContent = String(muteCount);
+  if (statExpiring) statExpiring.textContent = String(expiringCount);
+}
+
+/**
+ * Render expiring soon list (next 5 items expiring within 24h)
+ */
+async function renderExpiringSoon(): Promise<void> {
+  const list = document.getElementById('expiring-list');
   if (!list) return;
 
-  const contexts = await getPostContexts();
+  const [blocks, mutes] = await Promise.all([getTempBlocks(), getTempMutes()]);
 
-  if (contexts.length === 0) {
-    list.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">📋</div>
-        <div>No action history</div>
-      </div>
-    `;
+  const now = Date.now();
+  const combined: CombinedItem[] = [];
+
+  // Collect blocks expiring within 24h
+  for (const [did, data] of Object.entries(blocks)) {
+    const item = data as TempItem;
+    if (item.expiresAt - now <= TWENTY_FOUR_HOURS && item.expiresAt > now) {
+      combined.push({
+        did,
+        handle: item.handle,
+        expiresAt: item.expiresAt,
+        createdAt: item.createdAt,
+        type: 'block',
+      });
+    }
+  }
+
+  // Collect mutes expiring within 24h
+  for (const [did, data] of Object.entries(mutes)) {
+    const item = data as TempItem;
+    if (item.expiresAt - now <= TWENTY_FOUR_HOURS && item.expiresAt > now) {
+      combined.push({
+        did,
+        handle: item.handle,
+        expiresAt: item.expiresAt,
+        createdAt: item.createdAt,
+        type: 'mute',
+      });
+    }
+  }
+
+  // Sort by expiration (soonest first)
+  combined.sort((a, b) => a.expiresAt - b.expiresAt);
+
+  // Take first 5
+  const items = combined.slice(0, 5);
+
+  if (items.length === 0) {
+    list.innerHTML = '<div class="empty">Nothing expiring soon</div>';
     return;
   }
 
   list.innerHTML = '';
-  for (const context of contexts) {
-    list.appendChild(createContextElement(context));
+  for (const item of items) {
+    list.appendChild(createExpiringItem(item));
   }
 }
 
 /**
- * Switch tabs
+ * Render recent activity list (last 5 history entries)
  */
-async function switchTab(tab: string): Promise<void> {
-  // Save to storage
-  await browser.storage.local.set({ [STORAGE_KEYS.LAST_TAB]: tab });
+async function renderRecentActivity(): Promise<void> {
+  const list = document.getElementById('recent-list');
+  if (!list) return;
 
-  // Update tab styles
-  document.querySelectorAll('.tab').forEach((t) => {
-    const el = t as HTMLElement;
-    el.classList.toggle('active', el.dataset.tab === tab);
-  });
+  const history = await getActionHistory();
+  const recent = history.slice(0, 5);
 
-  // Show/hide lists
-  const blocksList = document.getElementById('blocks-list');
-  const mutesList = document.getElementById('mutes-list');
-  const historyList = document.getElementById('history-list');
-  if (blocksList) blocksList.style.display = tab === 'blocks' ? 'block' : 'none';
-  if (mutesList) mutesList.style.display = tab === 'mutes' ? 'block' : 'none';
-  if (historyList) historyList.style.display = tab === 'history' ? 'block' : 'none';
+  if (recent.length === 0) {
+    list.innerHTML = '<div class="empty">No recent activity</div>';
+    return;
+  }
 
-  // Render history when tab is selected
-  if (tab === 'history') {
-    renderHistory();
+  list.innerHTML = '';
+  for (const entry of recent) {
+    list.appendChild(createRecentItem(entry));
+  }
+}
+
+/**
+ * Update sync status display
+ */
+async function updateSyncStatus(): Promise<void> {
+  const syncStatus = document.getElementById('sync-status');
+  if (!syncStatus) return;
+
+  const state = await getSyncState();
+
+  if (state.lastBlockSync > 0 || state.lastMuteSync > 0) {
+    const lastSync = Math.max(state.lastBlockSync, state.lastMuteSync);
+    syncStatus.textContent = `Last sync: ${formatTimestamp(lastSync)}`;
+    syncStatus.style.display = 'block';
+  } else {
+    syncStatus.style.display = 'none';
+  }
+}
+
+/**
+ * Remove a temp block or mute
+ */
+async function removeItem(did: string, type: string): Promise<void> {
+  updateStatus(type === 'block' ? 'Unblocking...' : 'Unmuting...');
+
+  try {
+    const response = (await browser.runtime.sendMessage({
+      type: type === 'block' ? 'UNBLOCK_USER' : 'UNMUTE_USER',
+      did,
+    })) as { success: boolean; error?: string };
+
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to process request');
+    }
+
+    // Remove from storage
+    const key = type === 'block' ? STORAGE_KEYS.TEMP_BLOCKS : STORAGE_KEYS.TEMP_MUTES;
+    const result = await browser.storage.sync.get(key);
+    const items = (result[key] || {}) as Record<string, TempItem>;
+
+    delete items[did];
+    await browser.storage.sync.set({ [key]: items });
+
+    // Re-render
+    renderStats();
+    renderExpiringSoon();
+    updateStatus(type === 'block' ? 'Unblocked!' : 'Unmuted!');
+  } catch (error) {
+    console.error('[ErgoBlock Popup] Remove failed:', error);
+    updateStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -348,9 +361,9 @@ async function checkNow(): Promise<void> {
       updateStatus('Check complete!');
     }
 
-    // Re-render lists
-    renderBlocks();
-    renderMutes();
+    renderStats();
+    renderExpiringSoon();
+    renderRecentActivity();
     checkAuthStatus();
   } catch (error) {
     const result = await browser.storage.local.get('authStatus');
@@ -363,31 +376,65 @@ async function checkNow(): Promise<void> {
   }
 }
 
+/**
+ * Trigger sync with Bluesky
+ */
+async function syncNow(): Promise<void> {
+  updateStatus('Syncing with Bluesky...');
+
+  try {
+    const response = (await browser.runtime.sendMessage({ type: 'SYNC_NOW' })) as {
+      success: boolean;
+      error?: string;
+    };
+
+    if (response.success) {
+      updateStatus('Sync complete!');
+      updateSyncStatus();
+    } else {
+      throw new Error(response.error || 'Sync failed');
+    }
+
+    renderStats();
+    renderExpiringSoon();
+    renderRecentActivity();
+  } catch (error) {
+    console.error('[ErgoBlock Popup] Sync failed:', error);
+    updateStatus(`Sync error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Open the full manager page
+ */
+function openManager(): void {
+  browser.tabs.create({ url: browser.runtime.getURL('manager.html') });
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', async () => {
-  // Load last active tab
-  const result = await browser.storage.local.get(STORAGE_KEYS.LAST_TAB);
-  const lastTab = (result[STORAGE_KEYS.LAST_TAB] as string) || 'blocks';
-
-  await switchTab(lastTab);
-  renderBlocks();
-  renderMutes();
+  renderStats();
+  renderExpiringSoon();
+  renderRecentActivity();
   checkAuthStatus();
+  updateSyncStatus();
 
-  // Tab switching
-  document.querySelectorAll('.tab').forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const el = tab as HTMLElement;
-      if (el.dataset.tab) {
-        switchTab(el.dataset.tab);
-      }
-    });
-  });
+  // Open manager button
+  const openManagerBtn = document.getElementById('open-manager');
+  if (openManagerBtn) {
+    openManagerBtn.addEventListener('click', openManager);
+  }
 
   // Check now button
   const checkNowBtn = document.getElementById('check-now');
   if (checkNowBtn) {
     checkNowBtn.addEventListener('click', checkNow);
+  }
+
+  // Sync now button
+  const syncNowBtn = document.getElementById('sync-now');
+  if (syncNowBtn) {
+    syncNowBtn.addEventListener('click', syncNow);
   }
 
   // Remove buttons (delegated)
@@ -400,24 +447,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         removeItem(did, type);
       }
     }
-
-    // Delete context button
-    if (target.classList.contains('btn-delete') && target.dataset.contextId) {
-      await deletePostContext(target.dataset.contextId);
-      renderHistory();
-      updateStatus('Entry deleted');
-    }
   });
 });
 
 // Refresh lists periodically while popup is open
 setInterval(() => {
-  const activeTab = document.querySelector('.tab.active') as HTMLElement;
-  const currentTab = activeTab?.dataset.tab || 'blocks';
-
-  if (currentTab === 'blocks') {
-    renderBlocks();
-  } else if (currentTab === 'mutes') {
-    renderMutes();
-  }
+  renderStats();
+  renderExpiringSoon();
 }, 30000); // Every 30 seconds

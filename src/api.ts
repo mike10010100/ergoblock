@@ -4,8 +4,13 @@ import {
   StorageStructure,
   Profile,
   ProfileView,
+  ProfileWithViewer,
   GetBlocksResponse,
   GetMutesResponse,
+  BlockRecord,
+  ListBlockRecordsResponse,
+  FeedPost,
+  GetAuthorFeedResponse,
 } from './types.js';
 
 // AT Protocol API helpers for Bluesky
@@ -150,15 +155,26 @@ export async function executeApiRequest<T>(
   const response = await fetch(url, options);
 
   if (!response.ok) {
-    const error = (await response.json().catch(() => ({}))) as { message?: string };
-    console.error('[TempBlock] API error:', response.status, error);
+    const error = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+    const errorCode = error.error || '';
+    const errorMessage = error.message || error.error || `API error: ${response.status}`;
+
+    // Block-related errors are expected during context detection, don't log as errors
+    const isBlockError =
+      errorCode === 'BlockedActor' ||
+      errorCode === 'BlockedByActor' ||
+      errorMessage.includes('blocked');
+
+    if (!isBlockError) {
+      console.error('[TempBlock] API error:', response.status, JSON.stringify(error));
+    }
 
     // Throw specific error for 401 to help background worker detect auth failure
     if (response.status === 401) {
-      throw new Error(`Auth error: ${response.status} ${error.message || ''}`);
+      throw new Error(`Auth error: ${response.status} ${errorMessage}`);
     }
 
-    throw new Error(error.message || `API error: ${response.status}`);
+    throw new Error(errorMessage);
   }
 
   // Some endpoints return empty responses
@@ -304,6 +320,59 @@ export async function getProfile(actor: string): Promise<Profile | null> {
   return apiRequest<Profile>(`app.bsky.actor.getProfile?actor=${encodeURIComponent(actor)}`);
 }
 
+/**
+ * Response from app.bsky.actor.getProfiles
+ */
+interface GetProfilesResponse {
+  profiles: ProfileWithViewer[];
+}
+
+/**
+ * Get multiple profiles with viewer state (up to 25 at a time)
+ * Includes relationship info: blocking, muted, following, followedBy
+ * @param actors - Array of handles or DIDs (max 25)
+ */
+export async function getProfiles(actors: string[]): Promise<ProfileWithViewer[]> {
+  if (actors.length === 0) return [];
+  if (actors.length > 25) {
+    throw new Error('getProfiles supports max 25 actors at once');
+  }
+
+  const params = actors.map((a) => `actors=${encodeURIComponent(a)}`).join('&');
+  const response = await apiRequest<GetProfilesResponse>(`app.bsky.actor.getProfiles?${params}`);
+  return response?.profiles || [];
+}
+
+/**
+ * Get profiles for a list of DIDs, batching requests (25 per batch)
+ * Returns a Map of DID -> ProfileWithViewer for quick lookup
+ */
+export async function getProfilesBatched(
+  dids: string[],
+  onProgress?: (fetched: number, total: number) => void
+): Promise<Map<string, ProfileWithViewer>> {
+  const result = new Map<string, ProfileWithViewer>();
+  const batchSize = 25;
+
+  for (let i = 0; i < dids.length; i += batchSize) {
+    const batch = dids.slice(i, i + batchSize);
+    const profiles = await getProfiles(batch);
+
+    for (const profile of profiles) {
+      result.set(profile.did, profile);
+    }
+
+    onProgress?.(Math.min(i + batchSize, dids.length), dids.length);
+
+    // Rate limit between batches
+    if (i + batchSize < dids.length) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
+  return result;
+}
+
 // Rate limiting delay for paginated requests (ms)
 const PAGINATION_DELAY = 500;
 
@@ -402,4 +471,119 @@ export async function getAllMutes(
 
   console.log('[ErgoBlock] Fetched all mutes:', allMutes.length);
   return allMutes;
+}
+
+/**
+ * Get a page of block records with createdAt timestamps
+ * @param cursor - Pagination cursor
+ * @param limit - Number of results per page (max 100)
+ */
+export async function getBlockRecords(
+  cursor?: string,
+  limit = 100
+): Promise<ListBlockRecordsResponse> {
+  const session = getSession();
+  if (!session) throw new Error('Not logged in');
+
+  let endpoint = `com.atproto.repo.listRecords?repo=${session.did}&collection=app.bsky.graph.block&limit=${limit}`;
+  if (cursor) {
+    endpoint += `&cursor=${encodeURIComponent(cursor)}`;
+  }
+
+  // listRecords goes to user's PDS
+  const response = await apiRequest<ListBlockRecordsResponse>(
+    endpoint,
+    'GET',
+    null,
+    session.pdsUrl
+  );
+  return response || { records: [] };
+}
+
+/**
+ * Fetch all block records with createdAt timestamps (paginated)
+ * @param onProgress - Optional callback with current count
+ */
+export async function getAllBlockRecords(
+  onProgress?: (count: number) => void
+): Promise<BlockRecord[]> {
+  const allRecords: BlockRecord[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const response = await getBlockRecords(cursor);
+    allRecords.push(...response.records);
+    cursor = response.cursor;
+    onProgress?.(allRecords.length);
+
+    // Rate limit between requests
+    if (cursor) {
+      await sleep(PAGINATION_DELAY);
+    }
+  } while (cursor);
+
+  console.log('[ErgoBlock] Fetched all block records:', allRecords.length);
+  return allRecords;
+}
+
+/**
+ * Get a user's feed (posts, replies, reposts)
+ * @param actor - DID or handle
+ * @param limit - Number of posts to fetch
+ * @param cursor - Pagination cursor
+ */
+export async function getAuthorFeed(
+  actor: string,
+  limit = 100,
+  cursor?: string
+): Promise<GetAuthorFeedResponse> {
+  let endpoint = `app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&limit=${limit}`;
+  if (cursor) {
+    endpoint += `&cursor=${encodeURIComponent(cursor)}`;
+  }
+
+  // getAuthorFeed goes to public API
+  const response = await apiRequest<GetAuthorFeedResponse>(endpoint);
+  return response || { feed: [] };
+}
+
+/**
+ * Find the most recent interaction (reply or quote) from targetDid to loggedInDid
+ * Used for "guessed context" when importing blocks
+ * @param targetDid - DID of the blocked user
+ * @param loggedInDid - DID of the logged-in user
+ * @param limit - Number of posts to scan (default 100)
+ */
+export async function findRecentInteraction(
+  targetDid: string,
+  loggedInDid: string,
+  limit = 100
+): Promise<FeedPost | null> {
+  try {
+    const { feed } = await getAuthorFeed(targetDid, limit);
+
+    for (const { post } of feed) {
+      // Check if this is a reply to the logged-in user
+      if (post.record.reply?.parent?.uri?.includes(loggedInDid)) {
+        return post;
+      }
+
+      // Check if this is a quote of the logged-in user's post
+      if (
+        post.record.embed?.$type === 'app.bsky.embed.record' &&
+        post.record.embed.record?.uri?.includes(loggedInDid)
+      ) {
+        return post;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    // User may have blocked us back, profile may be private, etc.
+    console.debug(
+      `[ErgoBlock] Could not fetch feed for ${targetDid}:`,
+      error instanceof Error ? error.message : error
+    );
+    return null;
+  }
 }

@@ -36,6 +36,12 @@ export function copyAssets() {
   // Copy options.html
   fs.copyFileSync(path.join(__dirname, '..', 'options.html'), path.join(distDir, 'options.html'));
 
+  // Copy manager.html
+  const managerHtmlPath = path.join(__dirname, '..', 'src', 'manager.html');
+  if (fs.existsSync(managerHtmlPath)) {
+    fs.copyFileSync(managerHtmlPath, path.join(distDir, 'manager.html'));
+  }
+
   // Copy icons folder
   const iconsDir = path.join(__dirname, '..', 'icons');
   const distIconsDir = path.join(distDir, 'icons');

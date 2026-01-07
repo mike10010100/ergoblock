@@ -393,6 +393,10 @@ export async function getAllManagedBlocks(): Promise<ManagedEntry[]> {
         source: 'bluesky',
         type: 'block',
         syncedAt: data.syncedAt,
+        createdAt: data.createdAt,
+        rkey: data.rkey,
+        mutualBlock: data.mutualBlock,
+        viewer: data.viewer,
       });
     }
   }
@@ -442,6 +446,7 @@ export async function getAllManagedMutes(): Promise<ManagedEntry[]> {
         source: 'bluesky',
         type: 'mute',
         syncedAt: data.syncedAt,
+        viewer: data.viewer,
       });
     }
   }
