@@ -213,3 +213,110 @@ describe('Background Service Worker', () => {
     );
   });
 });
+
+describe('isSearchPostInteraction', () => {
+  const createMockPost = (overrides: {
+    text?: string;
+    replyParentUri?: string;
+    embedType?: string;
+    embedRecordUri?: string;
+  }) => ({
+    uri: 'at://did:test/app.bsky.feed.post/123',
+    cid: 'cid123',
+    author: { did: 'did:author', handle: 'author.bsky.social' },
+    record: {
+      $type: 'app.bsky.feed.post' as const,
+      text: overrides.text || 'Hello world',
+      createdAt: '2024-01-01T00:00:00Z',
+      reply: overrides.replyParentUri
+        ? { parent: { uri: overrides.replyParentUri }, root: { uri: overrides.replyParentUri } }
+        : undefined,
+      embed: overrides.embedType
+        ? { $type: overrides.embedType, record: { uri: overrides.embedRecordUri } }
+        : undefined,
+    },
+    indexedAt: '2024-01-01T00:00:00Z',
+  });
+
+  it('should detect reply to logged-in user', async () => {
+    const { isSearchPostInteraction } = await import('../background.js');
+
+    const post = createMockPost({
+      replyParentUri: 'at://did:loggedin:user/app.bsky.feed.post/456',
+    });
+
+    expect(isSearchPostInteraction(post, 'did:loggedin:user')).toBe(true);
+    expect(isSearchPostInteraction(post, 'did:other:user')).toBe(false);
+  });
+
+  it('should detect quote post of logged-in user', async () => {
+    const { isSearchPostInteraction } = await import('../background.js');
+
+    const post = createMockPost({
+      embedType: 'app.bsky.embed.record',
+      embedRecordUri: 'at://did:loggedin:user/app.bsky.feed.post/789',
+    });
+
+    expect(isSearchPostInteraction(post, 'did:loggedin:user')).toBe(true);
+    expect(isSearchPostInteraction(post, 'did:other:user')).toBe(false);
+  });
+
+  it('should detect @mention in text', async () => {
+    const { isSearchPostInteraction } = await import('../background.js');
+
+    const post = createMockPost({
+      text: 'Hey @myhandle.bsky.social check this out!',
+    });
+
+    expect(isSearchPostInteraction(post, 'did:any', 'myhandle.bsky.social')).toBe(true);
+    expect(isSearchPostInteraction(post, 'did:any', 'otherhandle.bsky.social')).toBe(false);
+  });
+
+  it('should be case-insensitive for handle mentions', async () => {
+    const { isSearchPostInteraction } = await import('../background.js');
+
+    const post = createMockPost({
+      text: 'Hey @MyHandle.bsky.social check this out!',
+    });
+
+    expect(isSearchPostInteraction(post, 'did:any', 'myhandle.bsky.social')).toBe(true);
+  });
+
+  it('should return false for unrelated posts', async () => {
+    const { isSearchPostInteraction } = await import('../background.js');
+
+    const post = createMockPost({
+      text: 'Just a random post with no interaction',
+    });
+
+    expect(isSearchPostInteraction(post, 'did:loggedin:user', 'myhandle.bsky.social')).toBe(false);
+  });
+
+  it('should not match embed types other than record', async () => {
+    const { isSearchPostInteraction } = await import('../background.js');
+
+    const post = createMockPost({
+      embedType: 'app.bsky.embed.images',
+      embedRecordUri: 'at://did:loggedin:user/app.bsky.feed.post/789',
+    });
+
+    expect(isSearchPostInteraction(post, 'did:loggedin:user')).toBe(false);
+  });
+
+  it('should work without handle parameter', async () => {
+    const { isSearchPostInteraction } = await import('../background.js');
+
+    const replyPost = createMockPost({
+      replyParentUri: 'at://did:loggedin:user/app.bsky.feed.post/456',
+    });
+
+    // Should still detect reply even without handle
+    expect(isSearchPostInteraction(replyPost, 'did:loggedin:user')).toBe(true);
+
+    // Text mention won't be detected without handle
+    const mentionPost = createMockPost({
+      text: 'Hey @myhandle.bsky.social!',
+    });
+    expect(isSearchPostInteraction(mentionPost, 'did:any')).toBe(false);
+  });
+});

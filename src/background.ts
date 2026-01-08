@@ -36,6 +36,8 @@ import {
   DidDocument,
   RawPostRecord,
   ListPostRecordsResponse,
+  SearchPostsResponse,
+  SearchPostView,
   GetFollowsResponse,
   GetFollowersResponse,
   GetListBlocksResponse,
@@ -678,7 +680,168 @@ function isInteractionWithUser(
 }
 
 /**
+ * Convert SearchPostView to FeedPost format
+ */
+function searchPostToFeedPost(post: SearchPostView): FeedPost {
+  return {
+    uri: post.uri,
+    cid: post.cid,
+    author: { did: post.author.did, handle: post.author.handle },
+    record: {
+      text: post.record.text,
+      createdAt: post.record.createdAt,
+      reply: post.record.reply,
+      embed: post.record.embed,
+    },
+  };
+}
+
+/**
+ * Check if a SearchPostView is an interaction with the logged-in user
+ * (quote post or reply that the text search might have caught)
+ */
+export function isSearchPostInteraction(
+  post: SearchPostView,
+  loggedInDid: string,
+  loggedInHandle?: string
+): boolean {
+  const record = post.record;
+
+  // Check if reply to logged-in user
+  if (record.reply?.parent?.uri?.includes(loggedInDid)) {
+    return true;
+  }
+
+  // Check if quote of logged-in user's post
+  if (
+    record.embed?.$type === 'app.bsky.embed.record' &&
+    record.embed.record?.uri?.includes(loggedInDid)
+  ) {
+    return true;
+  }
+
+  // Check if text mentions the user (by handle)
+  if (loggedInHandle && record.text.toLowerCase().includes(`@${loggedInHandle.toLowerCase()}`)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Fast context search using public Bluesky search API.
+ * Uses unauthenticated requests to bypass block filtering.
+ *
+ * Searches for posts by the target user that mention the logged-in user.
+ * Note: Quote posts don't use mentions, so we also do a text search and
+ * filter results to find actual QTs.
+ *
+ * Runs all searches in parallel and returns the most recent result.
+ */
+async function findContextViaSearch(
+  targetDid: string,
+  targetHandle: string,
+  loggedInDid: string,
+  loggedInHandle: string | undefined
+): Promise<FeedPost | null> {
+  if (!loggedInHandle) {
+    console.log('[ErgoBlock BG] No logged-in handle for search');
+    return null;
+  }
+
+  const PUBLIC_API = 'https://public.api.bsky.app';
+
+  console.log(`[ErgoBlock BG] Searching for context via public API: ${targetHandle} → @${loggedInHandle}`);
+
+  try {
+    // Run all searches in parallel for speed
+    const [mentionsResult, repliesResult, textResult] = await Promise.all([
+      // Search 1: Posts that mention the logged-in user
+      (async (): Promise<SearchPostView | null> => {
+        const query = encodeURIComponent(`from:${targetHandle}`);
+        const mentions = encodeURIComponent(loggedInHandle);
+        const endpoint = `${PUBLIC_API}/xrpc/app.bsky.feed.searchPosts?q=${query}&mentions=${mentions}&limit=1&sort=latest`;
+
+        const response = await fetch(endpoint);
+        if (!response.ok) return null;
+
+        const data = (await response.json()) as SearchPostsResponse;
+        const post = data.posts?.[0];
+        if (post) {
+          console.log(`[ErgoBlock BG] Mentions search found: ${post.record.createdAt}`);
+        }
+        return post || null;
+      })(),
+
+      // Search 2: Replies to the logged-in user
+      (async (): Promise<SearchPostView | null> => {
+        const query = encodeURIComponent(`from:${targetHandle} to:${loggedInHandle}`);
+        const endpoint = `${PUBLIC_API}/xrpc/app.bsky.feed.searchPosts?q=${query}&limit=1&sort=latest`;
+
+        const response = await fetch(endpoint);
+        if (!response.ok) return null;
+
+        const data = (await response.json()) as SearchPostsResponse;
+        const post = data.posts?.[0];
+        if (post) {
+          console.log(`[ErgoBlock BG] Reply search found: ${post.record.createdAt}`);
+        }
+        return post || null;
+      })(),
+
+      // Search 3: Text search for QTs (posts containing the handle)
+      (async (): Promise<SearchPostView | null> => {
+        const query = encodeURIComponent(`from:${targetHandle} ${loggedInHandle}`);
+        const endpoint = `${PUBLIC_API}/xrpc/app.bsky.feed.searchPosts?q=${query}&limit=25&sort=latest`;
+
+        const response = await fetch(endpoint);
+        if (!response.ok) return null;
+
+        const data = (await response.json()) as SearchPostsResponse;
+        // Filter to find actual interactions (QTs, replies, mentions)
+        for (const post of data.posts || []) {
+          if (isSearchPostInteraction(post, loggedInDid, loggedInHandle)) {
+            console.log(`[ErgoBlock BG] Text search found verified interaction: ${post.record.createdAt}`);
+            return post;
+          }
+        }
+        return null;
+      })(),
+    ]);
+
+    // Collect all found posts
+    const candidates: SearchPostView[] = [];
+    if (mentionsResult) candidates.push(mentionsResult);
+    if (repliesResult) candidates.push(repliesResult);
+    if (textResult) candidates.push(textResult);
+
+    if (candidates.length === 0) {
+      console.log(`[ErgoBlock BG] No context found via search`);
+      return null;
+    }
+
+    // Sort by createdAt descending and return the most recent
+    candidates.sort((a, b) => {
+      const dateA = new Date(a.record.createdAt).getTime();
+      const dateB = new Date(b.record.createdAt).getTime();
+      return dateB - dateA;
+    });
+
+    const mostRecent = candidates[0];
+    console.log(
+      `[ErgoBlock BG] Found ${candidates.length} candidates, returning most recent: ${mostRecent.uri} (${mostRecent.record.createdAt})`
+    );
+
+    return searchPostToFeedPost(mostRecent);
+  } catch (error) {
+    console.error('[ErgoBlock BG] Search API error:', error);
+    return null;
+  }
+}
+
+/**
  * Find post context for a block using direct PDS fetch.
+ * This is the fallback method when search doesn't find anything.
  *
  * For blocks: Just find their most recent interaction (reply, quote, @mention)
  * to us. Since they can't interact after being blocked, we don't need time filtering.
@@ -775,6 +938,27 @@ async function findBlockContextPost(
 }
 
 /**
+ * Find context for a blocked user - tries fast search first, then falls back to PDS.
+ */
+async function findContextWithFallback(
+  targetDid: string,
+  targetHandle: string,
+  loggedInDid: string,
+  loggedInHandle: string | undefined,
+  exhaustive = false
+): Promise<InteractionResult> {
+  // Try fast search API first (unauthenticated, bypasses blocks)
+  const searchResult = await findContextViaSearch(targetDid, targetHandle, loggedInDid, loggedInHandle);
+  if (searchResult) {
+    return { post: searchResult, blockedBy: false };
+  }
+
+  // Fall back to PDS pagination if search didn't find anything
+  console.log(`[ErgoBlock BG] Search didn't find context, trying PDS for ${targetHandle}`);
+  return findBlockContextPost(targetDid, loggedInDid, loggedInHandle, exhaustive);
+}
+
+/**
  * Generate context for newly imported blocks during sync.
  * Uses PDS-based fetch to find most recent interaction.
  */
@@ -797,7 +981,7 @@ async function generateContextForNewBlocks(
     }
 
     try {
-      const result = await findBlockContextPost(block.did, loggedInDid, loggedInHandle);
+      const result = await findContextWithFallback(block.did, block.handle, loggedInDid, loggedInHandle);
 
       if (result.post) {
         await addPostContext({
@@ -1667,8 +1851,8 @@ async function handleFindContext(
     // Get logged-in user's handle for @mention detection
     const loggedInHandle = await getLoggedInHandle(auth);
 
-    // Find context using PDS-based search - exhaustive mode for manual searches
-    const result = await findBlockContextPost(did, auth.did, loggedInHandle, true);
+    // Find context using fast search + PDS fallback - exhaustive mode for manual searches
+    const result = await findContextWithFallback(did, handle, auth.did, loggedInHandle, true);
 
     if (result.post) {
       await addPostContext({

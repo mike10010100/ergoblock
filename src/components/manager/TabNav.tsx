@@ -1,0 +1,35 @@
+import type { JSX } from 'preact';
+import { currentTab, type TabType } from '../../signals/manager.js';
+
+interface Tab {
+  id: TabType;
+  label: string;
+}
+
+const TABS: Tab[] = [
+  { id: 'blocks', label: 'All Blocks' },
+  { id: 'mutes', label: 'All Mutes' },
+  { id: 'history', label: 'History' },
+  { id: 'amnesty', label: 'Amnesty' },
+  { id: 'blocklist-audit', label: 'Blocklist Audit' },
+];
+
+export function TabNav(): JSX.Element {
+  const handleTabClick = (tabId: TabType) => {
+    currentTab.value = tabId;
+  };
+
+  return (
+    <div class="tabs">
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          class={`tab ${currentTab.value === tab.id ? 'active' : ''}`}
+          onClick={() => handleTabClick(tab.id)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}

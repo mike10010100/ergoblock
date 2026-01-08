@@ -295,6 +295,44 @@ export interface ListPostRecordsResponse {
 }
 
 /**
+ * Post view from app.bsky.feed.searchPosts
+ */
+export interface SearchPostView {
+  uri: string;
+  cid: string;
+  author: {
+    did: string;
+    handle: string;
+    displayName?: string;
+    avatar?: string;
+  };
+  record: {
+    $type: 'app.bsky.feed.post';
+    text: string;
+    createdAt: string;
+    reply?: { parent: { uri: string }; root?: { uri: string } };
+    embed?: { $type: string; record?: { uri: string } };
+    facets?: Array<{
+      index: { byteStart: number; byteEnd: number };
+      features: Array<{ $type: string; did?: string }>;
+    }>;
+  };
+  replyCount?: number;
+  repostCount?: number;
+  likeCount?: number;
+  indexedAt: string;
+}
+
+/**
+ * Response from app.bsky.feed.searchPosts
+ */
+export interface SearchPostsResponse {
+  posts: SearchPostView[];
+  cursor?: string;
+  hitsTotal?: number;
+}
+
+/**
  * Record of a user that has been reviewed by Amnesty feature
  * Tracks DIDs that have been presented so we don't show them again
  */
