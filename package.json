@@ -34,7 +34,7 @@
     "globals": "^17.0.0",
     "husky": "^9.1.7",
     "jsdom": "^27.4.0",
-    "lint-staged": "^16.2.7",
+    "lint-staged": "^17.6.0",
     "prettier": "^3.7.4",
     "sharp": "^0.34.5",
     "typescript": "^5.9.3",
