@@ -50,7 +50,7 @@
   },
   "dependencies": {
     "@preact/signals": "^2.11.3",
-    "preact": "^10.28.2",
+    "preact": "^11.0.1",
     "webextension-polyfill": "^0.12.0"
   }
 }
