@@ -59,6 +59,7 @@ async function saveOptions(): Promise<void> {
     // Preserve post context settings
     savePostContext: currentOptions.savePostContext,
     postContextRetentionDays: currentOptions.postContextRetentionDays,
+    forgivenessPeriodDays: currentOptions.forgivenessPeriodDays,
   };
 
   await setOptions(options);

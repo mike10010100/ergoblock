@@ -375,10 +375,7 @@ export async function updateSyncState(update: Partial<SyncState>): Promise<void>
  * Returns entries sorted by creation/sync date (newest first)
  */
 export async function getAllManagedBlocks(): Promise<ManagedEntry[]> {
-  const [tempBlocks, permanentBlocks] = await Promise.all([
-    getTempBlocks(),
-    getPermanentBlocks(),
-  ]);
+  const [tempBlocks, permanentBlocks] = await Promise.all([getTempBlocks(), getPermanentBlocks()]);
 
   const entries: ManagedEntry[] = [];
 
@@ -429,10 +426,7 @@ export async function getAllManagedBlocks(): Promise<ManagedEntry[]> {
  * Returns entries sorted by creation/sync date (newest first)
  */
 export async function getAllManagedMutes(): Promise<ManagedEntry[]> {
-  const [tempMutes, permanentMutes] = await Promise.all([
-    getTempMutes(),
-    getPermanentMutes(),
-  ]);
+  const [tempMutes, permanentMutes] = await Promise.all([getTempMutes(), getPermanentMutes()]);
 
   const entries: ManagedEntry[] = [];
 

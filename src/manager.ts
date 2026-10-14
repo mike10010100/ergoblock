@@ -79,7 +79,17 @@ const elements = {
 // ============================================================================
 
 async function loadData(): Promise<void> {
-  [allBlocks, allMutes, history, contexts, syncState, amnestyReviewedDids, options, blocklistAuditState, blocklistConflicts] = await Promise.all([
+  [
+    allBlocks,
+    allMutes,
+    history,
+    contexts,
+    syncState,
+    amnestyReviewedDids,
+    options,
+    blocklistAuditState,
+    blocklistConflicts,
+  ] = await Promise.all([
     getAllManagedBlocks(),
     getAllManagedMutes(),
     getActionHistory(),
@@ -99,8 +109,12 @@ async function loadData(): Promise<void> {
 function updateStats(): void {
   elements.totalBlocks.textContent = allBlocks.length.toString();
   elements.totalMutes.textContent = allMutes.length.toString();
-  elements.tempBlocks.textContent = allBlocks.filter((b) => b.source === 'ergoblock_temp').length.toString();
-  elements.tempMutes.textContent = allMutes.filter((m) => m.source === 'ergoblock_temp').length.toString();
+  elements.tempBlocks.textContent = allBlocks
+    .filter((b) => b.source === 'ergoblock_temp')
+    .length.toString();
+  elements.tempMutes.textContent = allMutes
+    .filter((m) => m.source === 'ergoblock_temp')
+    .length.toString();
 }
 
 function updateSyncStatus(): void {
@@ -111,7 +125,8 @@ function updateSyncStatus(): void {
 
   // Detect stale "syncing" state - if sync started more than 5 minutes ago, it's likely stale
   const lastSync = Math.max(syncState.lastBlockSync, syncState.lastMuteSync);
-  const syncStartedTooLongAgo = syncState.syncInProgress && lastSync > 0 && Date.now() - lastSync > 5 * 60 * 1000;
+  const syncStartedTooLongAgo =
+    syncState.syncInProgress && lastSync > 0 && Date.now() - lastSync > 5 * 60 * 1000;
 
   if (syncState.syncInProgress && !syncStartedTooLongAgo) {
     elements.syncStatus.textContent = 'Syncing...';
@@ -168,7 +183,7 @@ function formatDate(timestamp: number): string {
 // Filtering & Sorting
 // ============================================================================
 
-function getItemHandle<T>(item: T): string {
+function getItemHandle(item: ManagedEntry | HistoryEntry | PostContext): string {
   if (typeof item === 'object' && item !== null) {
     if ('handle' in item) return (item as ManagedEntry).handle;
     if ('targetHandle' in item) return (item as PostContext).targetHandle;
@@ -176,7 +191,7 @@ function getItemHandle<T>(item: T): string {
   return '';
 }
 
-function getItemDate<T>(item: T): number {
+function getItemDate(item: ManagedEntry | HistoryEntry | PostContext): number {
   if (typeof item === 'object' && item !== null) {
     if ('source' in item) {
       // ManagedEntry
@@ -218,7 +233,7 @@ function filterAndSort<T extends ManagedEntry | HistoryEntry | PostContext>(
   const dir = sortDirection === 'asc' ? 1 : -1;
 
   filtered.sort((a, b) => {
-    let cmp = 0;
+    let cmp: number;
 
     switch (sortColumn) {
       case 'user': {
@@ -234,8 +249,8 @@ function filterAndSort<T extends ManagedEntry | HistoryEntry | PostContext>(
         break;
       }
       case 'expires': {
-        const expA = 'expiresAt' in a ? ((a as ManagedEntry).expiresAt || Infinity) : Infinity;
-        const expB = 'expiresAt' in b ? ((b as ManagedEntry).expiresAt || Infinity) : Infinity;
+        const expA = 'expiresAt' in a ? (a as ManagedEntry).expiresAt || Infinity : Infinity;
+        const expB = 'expiresAt' in b ? (b as ManagedEntry).expiresAt || Infinity : Infinity;
         cmp = expA - expB;
         break;
       }
@@ -308,7 +323,8 @@ function renderCurrentTab(): void {
   // Hide toolbar for amnesty and blocklist-audit tabs
   const toolbar = document.querySelector('.toolbar') as HTMLElement;
   if (toolbar) {
-    toolbar.style.display = (currentTab === 'amnesty' || currentTab === 'blocklist-audit') ? 'none' : 'flex';
+    toolbar.style.display =
+      currentTab === 'amnesty' || currentTab === 'blocklist-audit' ? 'none' : 'flex';
   }
 
   switch (currentTab) {
@@ -381,7 +397,9 @@ function renderContextCell(did: string, handle: string, isBlocked: boolean): str
   }
 
   const postUrl = ctx.postUri
-    ? ctx.postUri.replace('at://', 'https://bsky.app/profile/').replace('/app.bsky.feed.post/', '/post/')
+    ? ctx.postUri
+        .replace('at://', 'https://bsky.app/profile/')
+        .replace('/app.bsky.feed.post/', '/post/')
     : '';
   const isGuessed = ctx.guessed === true;
 
@@ -438,7 +456,8 @@ function getStatusIndicators(viewer: ProfileViewerState | undefined, isBlocksTab
 
 function renderBlockRow(block: ManagedEntry): string {
   const isTemp = block.source === 'ergoblock_temp';
-  const isExpiringSoon = isTemp && block.expiresAt && block.expiresAt - Date.now() < 24 * 60 * 60 * 1000;
+  const isExpiringSoon =
+    isTemp && block.expiresAt && block.expiresAt - Date.now() < 24 * 60 * 60 * 1000;
   const isMutual = block.viewer?.blockedBy === true;
 
   return `
@@ -461,11 +480,15 @@ function renderBlockRow(block: ManagedEntry): string {
       </td>
       <td>${getStatusIndicators(block.viewer, true)}</td>
       <td>
-        ${isTemp && block.expiresAt ? `
+        ${
+          isTemp && block.expiresAt
+            ? `
           <span class="badge ${isExpiringSoon ? 'badge-expiring' : ''}">
             ${formatTimeRemaining(block.expiresAt)}
           </span>
-        ` : '-'}
+        `
+            : '-'
+        }
       </td>
       <td>${block.createdAt ? formatDate(block.createdAt) : block.syncedAt ? formatDate(block.syncedAt) : '-'}</td>
       <td>
@@ -515,10 +538,18 @@ function renderMutesTable(): void {
 
 function renderMuteRow(mute: ManagedEntry): string {
   const isTemp = mute.source === 'ergoblock_temp';
-  const isExpiringSoon = isTemp && mute.expiresAt && mute.expiresAt - Date.now() < 24 * 60 * 60 * 1000;
+  const isExpiringSoon =
+    isTemp && mute.expiresAt && mute.expiresAt - Date.now() < 24 * 60 * 60 * 1000;
   const weBlockThem = !!mute.viewer?.blocking;
   const theyBlockUs = !!mute.viewer?.blockedBy;
-  const rowClass = weBlockThem && theyBlockUs ? 'mutual-block' : theyBlockUs ? 'blocked-by' : weBlockThem ? 'mutual-block' : '';
+  const rowClass =
+    weBlockThem && theyBlockUs
+      ? 'mutual-block'
+      : theyBlockUs
+        ? 'blocked-by'
+        : weBlockThem
+          ? 'mutual-block'
+          : '';
 
   return `
     <tr data-did="${mute.did}" class="${rowClass}">
@@ -540,11 +571,15 @@ function renderMuteRow(mute: ManagedEntry): string {
       </td>
       <td>${getStatusIndicators(mute.viewer, false)}</td>
       <td>
-        ${isTemp && mute.expiresAt ? `
+        ${
+          isTemp && mute.expiresAt
+            ? `
           <span class="badge ${isExpiringSoon ? 'badge-expiring' : ''}">
             ${formatTimeRemaining(mute.expiresAt)}
           </span>
-        ` : '-'}
+        `
+            : '-'
+        }
       </td>
       <td>${mute.createdAt ? formatDate(mute.createdAt) : mute.syncedAt ? formatDate(mute.syncedAt) : '-'}</td>
       <td>
@@ -697,7 +732,8 @@ async function renderAmnestyTab(): Promise<void> {
   const stats = await getAmnestyStats();
   const candidates = getAmnestyCandidates();
   const currentPeriod = options?.forgivenessPeriodDays || 90;
-  const currentPeriodLabel = FORGIVENESS_OPTIONS.find(o => o.value === currentPeriod)?.label || `${currentPeriod} days`;
+  const currentPeriodLabel =
+    FORGIVENESS_OPTIONS.find((o) => o.value === currentPeriod)?.label || `${currentPeriod} days`;
 
   // If we have an active candidate being shown, render the card
   if (amnestyCandidate) {
@@ -706,13 +742,14 @@ async function renderAmnestyTab(): Promise<void> {
   }
 
   // Build forgiveness period options
-  const periodOptions = FORGIVENESS_OPTIONS.map(opt =>
-    `<option value="${opt.value}" ${opt.value === currentPeriod ? 'selected' : ''}>${opt.label}</option>`
+  const periodOptions = FORGIVENESS_OPTIONS.map(
+    (opt) =>
+      `<option value="${opt.value}" ${opt.value === currentPeriod ? 'selected' : ''}>${opt.label}</option>`
   ).join('');
 
   // Count blocks vs mutes in candidates
-  const blockCount = candidates.filter(c => c.type === 'block').length;
-  const muteCount = candidates.filter(c => c.type === 'mute').length;
+  const blockCount = candidates.filter((c) => c.type === 'block').length;
+  const muteCount = candidates.filter((c) => c.type === 'mute').length;
   const freedCount = stats.unblocked + stats.unmuted;
 
   // Otherwise, show the intro screen
@@ -747,16 +784,20 @@ async function renderAmnestyTab(): Promise<void> {
         </div>
       </div>
 
-      ${candidates.length > 0 ? `
+      ${
+        candidates.length > 0
+          ? `
         <button class="amnesty-start-btn" id="amnesty-start">
           Start Review
         </button>
-      ` : `
+      `
+          : `
         <div class="amnesty-empty">
           <h3>No candidates available</h3>
           <p>All eligible entries have been reviewed, or you don't have any blocks/mutes older than ${currentPeriodLabel}.</p>
         </div>
-      `}
+      `
+      }
     </div>
   `;
 
@@ -823,7 +864,13 @@ async function startAmnestyReview(): Promise<void> {
  */
 async function renderAmnestyCard(
   candidate: ManagedEntry,
-  stats: { totalReviewed: number; unblocked: number; keptBlocked: number; unmuted: number; keptMuted: number }
+  stats: {
+    totalReviewed: number;
+    unblocked: number;
+    keptBlocked: number;
+    unmuted: number;
+    keptMuted: number;
+  }
 ): Promise<void> {
   const ctx = contextMap.get(candidate.did);
   const actionDate = candidate.createdAt || candidate.syncedAt;
@@ -834,7 +881,9 @@ async function renderAmnestyCard(
   const freedCount = stats.unblocked + stats.unmuted;
 
   const postUrl = ctx?.postUri
-    ? ctx.postUri.replace('at://', 'https://bsky.app/profile/').replace('/app.bsky.feed.post/', '/post/')
+    ? ctx.postUri
+        .replace('at://', 'https://bsky.app/profile/')
+        .replace('/app.bsky.feed.post/', '/post/')
     : '';
 
   elements.dataContainer.innerHTML = `
@@ -869,25 +918,39 @@ async function renderAmnestyCard(
 
         <div class="amnesty-card-context" id="amnesty-context">
           <div class="amnesty-context-label">Why did you ${actionVerbLower} them?</div>
-          ${amnestySearching ? `
+          ${
+            amnestySearching
+              ? `
             <div class="amnesty-searching">
               <div class="spinner"></div>
               Searching for interaction...
             </div>
-          ` : ctx ? `
+          `
+              : ctx
+                ? `
             <div class="amnesty-context-text">${escapeHtml(ctx.postText || 'No post text available')}</div>
-            ${postUrl ? `
+            ${
+              postUrl
+                ? `
               <div class="amnesty-context-link">
-                ${isBlock ? `
+                ${
+                  isBlock
+                    ? `
                   <button class="context-btn amnesty-view-btn" data-did="${escapeHtml(candidate.did)}" data-handle="${escapeHtml(candidate.handle)}" data-url="${escapeHtml(postUrl)}">View Post</button>
-                ` : `
+                `
+                    : `
                   <a href="${escapeHtml(postUrl)}" target="_blank" class="context-btn">View Post</a>
-                `}
+                `
+                }
               </div>
-            ` : ''}
-          ` : `
+            `
+                : ''
+            }
+          `
+                : `
             <div class="amnesty-no-context">No context found for this ${actionVerbLower}</div>
-          `}
+          `
+          }
         </div>
 
         <div class="amnesty-card-actions">
@@ -918,30 +981,46 @@ function updateAmnestyContext(): void {
   const isBlock = amnestyCandidate.type === 'block';
   const actionVerbLower = isBlock ? 'block' : 'mute';
   const postUrl = ctx?.postUri
-    ? ctx.postUri.replace('at://', 'https://bsky.app/profile/').replace('/app.bsky.feed.post/', '/post/')
+    ? ctx.postUri
+        .replace('at://', 'https://bsky.app/profile/')
+        .replace('/app.bsky.feed.post/', '/post/')
     : '';
 
   contextEl.innerHTML = `
     <div class="amnesty-context-label">Why did you ${actionVerbLower} them?</div>
-    ${amnestySearching ? `
+    ${
+      amnestySearching
+        ? `
       <div class="amnesty-searching">
         <div class="spinner"></div>
         Searching for interaction...
       </div>
-    ` : ctx ? `
+    `
+        : ctx
+          ? `
       <div class="amnesty-context-text">${escapeHtml(ctx.postText || 'No post text available')}</div>
-      ${postUrl ? `
+      ${
+        postUrl
+          ? `
         <div class="amnesty-context-link">
-          ${isBlock ? `
+          ${
+            isBlock
+              ? `
             <button class="context-btn amnesty-view-btn" data-did="${escapeHtml(amnestyCandidate.did)}" data-handle="${escapeHtml(amnestyCandidate.handle)}" data-url="${escapeHtml(postUrl)}">View Post</button>
-          ` : `
+          `
+              : `
             <a href="${escapeHtml(postUrl)}" target="_blank" class="context-btn">View Post</a>
-          `}
+          `
+          }
         </div>
-      ` : ''}
-    ` : `
+      `
+          : ''
+      }
+    `
+          : `
       <div class="amnesty-no-context">No context found for this ${actionVerbLower}</div>
-    `}
+    `
+    }
   `;
 
   // Re-setup view button (only for blocks, mutes can link directly)
@@ -997,7 +1076,9 @@ function setupAmnestyEvents(): void {
 /**
  * Handle amnesty decision (unblock/unmute or keep blocked/muted)
  */
-async function handleAmnestyDecision(decision: 'unblocked' | 'unmuted' | 'kept_blocked' | 'kept_muted'): Promise<void> {
+async function handleAmnestyDecision(
+  decision: 'unblocked' | 'unmuted' | 'kept_blocked' | 'kept_muted'
+): Promise<void> {
   if (!amnestyCandidate) return;
 
   const freeBtn = document.getElementById('amnesty-free') as HTMLButtonElement;
@@ -1066,9 +1147,11 @@ function renderBlocklistAuditTab(): void {
       <div class="blocklist-audit-container">
         <div class="blocklist-audit-empty">
           <h3>${state?.lastSyncAt ? 'No Conflicts Found' : 'Blocklist Audit'}</h3>
-          <p>${state?.lastSyncAt
-            ? 'None of your follows or followers are on any of your subscribed blocklists.'
-            : 'Check if any of your follows or followers are on blocklists you subscribe to.'}</p>
+          <p>${
+            state?.lastSyncAt
+              ? 'None of your follows or followers are on any of your subscribed blocklists.'
+              : 'Check if any of your follows or followers are on blocklists you subscribe to.'
+          }</p>
           <button class="audit-sync-btn" id="audit-sync-btn" ${state?.syncInProgress ? 'disabled' : ''}>
             ${state?.syncInProgress ? 'Syncing...' : 'Run Audit'}
           </button>
@@ -1135,16 +1218,24 @@ function renderBlocklistAuditTab(): void {
 
 function renderBlocklistGroup(group: BlocklistConflictGroup): string {
   const list = group.list;
-  const avatarUrl = list.avatar || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23666"><path d="M3 4h18v16H3V4zm2 2v12h14V6H5z"/></svg>';
+  const avatarUrl =
+    list.avatar ||
+    'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23666"><path d="M3 4h18v16H3V4zm2 2v12h14V6H5z"/></svg>';
 
   let conflictsHtml = '';
   for (const conflict of group.conflicts) {
     const user = conflict.user;
-    const userAvatar = user.avatar || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23666"><circle cx="12" cy="8" r="4"/><path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/></svg>';
+    const userAvatar =
+      user.avatar ||
+      'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23666"><circle cx="12" cy="8" r="4"/><path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/></svg>';
 
     const relationshipClass = user.relationship;
-    const relationshipText = user.relationship === 'mutual' ? 'Mutual' :
-      user.relationship === 'following' ? 'You follow' : 'Follows you';
+    const relationshipText =
+      user.relationship === 'mutual'
+        ? 'Mutual'
+        : user.relationship === 'following'
+          ? 'You follow'
+          : 'Follows you';
 
     conflictsHtml += `
       <div class="blocklist-conflict-row">
@@ -1171,11 +1262,15 @@ function renderBlocklistGroup(group: BlocklistConflictGroup): string {
           <span class="blocklist-conflict-count">${group.conflicts.length} conflict${group.conflicts.length === 1 ? '' : 's'}</span>
         </div>
         <div class="blocklist-actions">
-          ${group.dismissed ? `
+          ${
+            group.dismissed
+              ? `
             <button class="blocklist-action-btn blocklist-undismiss" data-list-uri="${list.uri}">Show Again</button>
-          ` : `
+          `
+              : `
             <button class="blocklist-action-btn blocklist-dismiss" data-list-uri="${list.uri}">Dismiss</button>
-          `}
+          `
+          }
           <button class="blocklist-action-btn blocklist-unsubscribe" data-list-uri="${list.uri}">Unsubscribe</button>
         </div>
       </div>
@@ -1195,7 +1290,10 @@ function setupBlocklistAuditEvents(): void {
       syncBtn.textContent = 'Syncing...';
 
       try {
-        const result = await browser.runtime.sendMessage({ type: 'BLOCKLIST_AUDIT_SYNC' });
+        const result = (await browser.runtime.sendMessage({ type: 'BLOCKLIST_AUDIT_SYNC' })) as {
+          success: boolean;
+          error?: string;
+        };
         if (result.success) {
           await loadData();
           renderBlocklistAuditTab();
@@ -1247,7 +1345,7 @@ function setupBlocklistAuditEvents(): void {
 
       const confirmed = confirm(
         `Are you sure you want to unsubscribe from "${group.list.name}"?\n\n` +
-        `This will remove all blocks/mutes from this list.`
+          `This will remove all blocks/mutes from this list.`
       );
 
       if (!confirmed) return;
@@ -1256,10 +1354,10 @@ function setupBlocklistAuditEvents(): void {
       (btn as HTMLButtonElement).textContent = 'Unsubscribing...';
 
       try {
-        const result = await browser.runtime.sendMessage({
+        const result = (await browser.runtime.sendMessage({
           type: 'UNSUBSCRIBE_BLOCKLIST',
           listUri,
-        });
+        })) as { success: boolean; error?: string };
 
         if (result.success) {
           // Re-run audit to refresh the data
@@ -1448,11 +1546,11 @@ async function handleTempUnblockAndView(
 
   try {
     // Request background to unblock
-    const response = await browser.runtime.sendMessage({
+    const response = (await browser.runtime.sendMessage({
       type: 'TEMP_UNBLOCK_FOR_VIEW',
       did,
       handle,
-    });
+    })) as { success: boolean; error?: string };
 
     if (!response.success) {
       throw new Error(response.error || 'Failed to unblock');
@@ -1473,7 +1571,6 @@ async function handleTempUnblockAndView(
     // Update button to show countdown
     button.classList.add('temp-unblocked');
     updateCountdownTimers();
-
   } catch (error) {
     console.error('[Manager] Temp unblock failed:', error);
     alert(`Failed to unblock: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1487,11 +1584,11 @@ async function handleTempUnblockAndView(
  */
 async function reblockUser(did: string, handle: string, button: HTMLButtonElement): Promise<void> {
   try {
-    const response = await browser.runtime.sendMessage({
+    const response = (await browser.runtime.sendMessage({
       type: 'REBLOCK_USER',
       did,
       handle,
-    });
+    })) as { success: boolean; error?: string };
 
     if (!response.success) {
       console.error('[Manager] Reblock failed:', response.error);
@@ -1552,7 +1649,10 @@ async function handleUnblock(did: string): Promise<void> {
     await removeTempBlock(did);
 
     // Request background to unblock via API
-    const response = await browser.runtime.sendMessage({ type: 'UNBLOCK_USER', did });
+    const response = (await browser.runtime.sendMessage({ type: 'UNBLOCK_USER', did })) as {
+      success: boolean;
+      error?: string;
+    };
     if (!response.success) {
       console.error('[Manager] Unblock failed:', response.error);
       alert(`Failed to unblock: ${response.error}`);
@@ -1574,7 +1674,10 @@ async function handleUnmute(did: string): Promise<void> {
     await removeTempMute(did);
 
     // Request background to unmute via API
-    const response = await browser.runtime.sendMessage({ type: 'UNMUTE_USER', did });
+    const response = (await browser.runtime.sendMessage({ type: 'UNMUTE_USER', did })) as {
+      success: boolean;
+      error?: string;
+    };
     if (!response.success) {
       console.error('[Manager] Unmute failed:', response.error);
       alert(`Failed to unmute: ${response.error}`);
@@ -1609,7 +1712,11 @@ async function handleBulkRemove(): Promise<void> {
   updateBulkActions();
 }
 
-async function handleFindContext(did: string, handle: string, button: HTMLButtonElement): Promise<void> {
+async function handleFindContext(
+  did: string,
+  handle: string,
+  button: HTMLButtonElement
+): Promise<void> {
   // Disable button and show searching state
   button.disabled = true;
   const originalText = button.textContent;
@@ -1656,7 +1763,10 @@ async function handleSync(): Promise<void> {
   elements.syncStatus.textContent = 'Syncing...';
 
   try {
-    const response = await browser.runtime.sendMessage({ type: 'SYNC_NOW' });
+    const response = (await browser.runtime.sendMessage({ type: 'SYNC_NOW' })) as {
+      success: boolean;
+      error?: string;
+    };
     if (response.success) {
       await loadData();
       updateStats();
@@ -1718,7 +1828,11 @@ function exportBlocksCSV(): void {
     b.displayName || '',
     b.source,
     b.expiresAt ? new Date(b.expiresAt).toISOString() : '',
-    b.createdAt ? new Date(b.createdAt).toISOString() : b.syncedAt ? new Date(b.syncedAt).toISOString() : '',
+    b.createdAt
+      ? new Date(b.createdAt).toISOString()
+      : b.syncedAt
+        ? new Date(b.syncedAt).toISOString()
+        : '',
   ]);
   const csv = [headers, ...rows].map((r) => r.map(escapeCSV).join(',')).join('\n');
   downloadCSV(csv, `ergoblock-blocks-${Date.now()}.csv`);
@@ -1732,14 +1846,27 @@ function exportMutesCSV(): void {
     m.displayName || '',
     m.source,
     m.expiresAt ? new Date(m.expiresAt).toISOString() : '',
-    m.createdAt ? new Date(m.createdAt).toISOString() : m.syncedAt ? new Date(m.syncedAt).toISOString() : '',
+    m.createdAt
+      ? new Date(m.createdAt).toISOString()
+      : m.syncedAt
+        ? new Date(m.syncedAt).toISOString()
+        : '',
   ]);
   const csv = [headers, ...rows].map((r) => r.map(escapeCSV).join(',')).join('\n');
   downloadCSV(csv, `ergoblock-mutes-${Date.now()}.csv`);
 }
 
 function exportHistoryCSV(): void {
-  const headers = ['DID', 'Handle', 'Action', 'Timestamp', 'Trigger', 'Success', 'Error', 'Duration'];
+  const headers = [
+    'DID',
+    'Handle',
+    'Action',
+    'Timestamp',
+    'Trigger',
+    'Success',
+    'Error',
+    'Duration',
+  ];
   const rows = history.map((h) => [
     h.did,
     h.handle,
@@ -1755,7 +1882,17 @@ function exportHistoryCSV(): void {
 }
 
 function exportContextsCSV(): void {
-  const headers = ['Post URI', 'Post Author', 'Target Handle', 'Target DID', 'Action', 'Permanent', 'Auto-detected', 'Timestamp', 'Post Text'];
+  const headers = [
+    'Post URI',
+    'Post Author',
+    'Target Handle',
+    'Target DID',
+    'Action',
+    'Permanent',
+    'Auto-detected',
+    'Timestamp',
+    'Post Text',
+  ];
   const rows = contexts.map((c) => [
     c.postUri,
     c.postAuthorHandle || c.postAuthorDid,

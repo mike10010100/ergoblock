@@ -22,23 +22,25 @@
     "prepare": "husky || true"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@testing-library/preact": "^3.2.4",
     "@types/chrome": "^0.3.5",
     "@types/webextension-polyfill": "^0.12.6",
     "@typescript-eslint/eslint-plugin": "^8.71.1",
-    "@typescript-eslint/parser": "^8.51.0",
-    "@vitest/coverage-v8": "^4.0.16",
+    "@typescript-eslint/parser": "^8.71.1",
+    "@vitest/coverage-v8": "^5.0.3",
     "esbuild": "^0.28.2",
-    "eslint": "^9.39.2",
+    "eslint": "^10.12.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
     "husky": "^9.1.7",
-    "jsdom": "^27.4.0",
-    "lint-staged": "^16.2.7",
+    "jsdom": "^30.1.2",
+    "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
     "sharp": "^0.35.5",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.16"
+    "typescript": "^7.0.2",
+    "typescript-legacy": "npm:typescript@^6.0.3",
+    "vitest": "^5.0.3"
   },
   "lint-staged": {
     "src/**/*.ts": [
@@ -50,7 +52,12 @@
   },
   "dependencies": {
     "@preact/signals": "^2.11.3",
-    "preact": "^10.28.2",
+    "preact": "^11.0.1",
     "webextension-polyfill": "^0.12.0"
+  },
+  "overrides": {
+    "typescript": "^7.0.2",
+    "eslint": "^10.12.0",
+    "preact": "^11.0.1"
   }
 }

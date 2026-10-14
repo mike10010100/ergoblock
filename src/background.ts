@@ -238,7 +238,7 @@ export async function sendNotification(
     title,
     message,
     silent: !options.notificationSound,
-  });
+  } as browser.Notifications.CreateNotificationOptions);
 }
 
 // ============================================================================
@@ -408,7 +408,9 @@ async function fetchViewerStates(
  * - Adds new blocks found in Bluesky to permanent storage
  * - Removes temp blocks that no longer exist in Bluesky (user unblocked externally)
  */
-async function syncBlocks(auth: AuthData): Promise<{ added: number; removed: number; newBlocks: Array<{ did: string; handle: string }> }> {
+async function syncBlocks(
+  auth: AuthData
+): Promise<{ added: number; removed: number; newBlocks: Array<{ did: string; handle: string }> }> {
   const now = Date.now();
   let added = 0;
   let removed = 0;
@@ -440,13 +442,22 @@ async function syncBlocks(auth: AuthData): Promise<{ added: number; removed: num
   const viewerStates = await fetchViewerStates(auth, allBlockDids);
 
   // Get current storage
-  const [tempBlocks, permanentBlocks] = await Promise.all([
-    getTempBlocks(),
-    getPermanentBlocks(),
-  ]);
+  const [tempBlocks, permanentBlocks] = await Promise.all([getTempBlocks(), getPermanentBlocks()]);
 
   // Build new permanent blocks map
-  const newPermanentBlocks: Record<string, { did: string; handle: string; displayName?: string; avatar?: string; createdAt?: number; syncedAt: number; rkey?: string; viewer?: ProfileViewerState }> = {};
+  const newPermanentBlocks: Record<
+    string,
+    {
+      did: string;
+      handle: string;
+      displayName?: string;
+      avatar?: string;
+      createdAt?: number;
+      syncedAt: number;
+      rkey?: string;
+      viewer?: ProfileViewerState;
+    }
+  > = {};
 
   for (const block of bskyBlocks) {
     // Skip if it's a temp block (we track those separately)
@@ -519,13 +530,20 @@ async function syncMutes(auth: AuthData): Promise<{ added: number; removed: numb
   const viewerStates = await fetchViewerStates(auth, allMuteDids);
 
   // Get current storage
-  const [tempMutes, permanentMutes] = await Promise.all([
-    getTempMutes(),
-    getPermanentMutes(),
-  ]);
+  const [tempMutes, permanentMutes] = await Promise.all([getTempMutes(), getPermanentMutes()]);
 
   // Build new permanent mutes map
-  const newPermanentMutes: Record<string, { did: string; handle: string; displayName?: string; avatar?: string; syncedAt: number; viewer?: ProfileViewerState }> = {};
+  const newPermanentMutes: Record<
+    string,
+    {
+      did: string;
+      handle: string;
+      displayName?: string;
+      avatar?: string;
+      syncedAt: number;
+      viewer?: ProfileViewerState;
+    }
+  > = {};
 
   for (const mute of bskyMutes) {
     // Skip if it's a temp mute (we track those separately)
@@ -751,7 +769,9 @@ async function findContextViaSearch(
 
   const PUBLIC_API = 'https://public.api.bsky.app';
 
-  console.log(`[ErgoBlock BG] Searching for context via public API: ${targetHandle} → @${loggedInHandle}`);
+  console.log(
+    `[ErgoBlock BG] Searching for context via public API: ${targetHandle} → @${loggedInHandle}`
+  );
 
   try {
     // Run all searches in parallel for speed
@@ -801,7 +821,9 @@ async function findContextViaSearch(
         // Filter to find actual interactions (QTs, replies, mentions)
         for (const post of data.posts || []) {
           if (isSearchPostInteraction(post, loggedInDid, loggedInHandle)) {
-            console.log(`[ErgoBlock BG] Text search found verified interaction: ${post.record.createdAt}`);
+            console.log(
+              `[ErgoBlock BG] Text search found verified interaction: ${post.record.createdAt}`
+            );
             return post;
           }
         }
@@ -948,7 +970,12 @@ async function findContextWithFallback(
   exhaustive = false
 ): Promise<InteractionResult> {
   // Try fast search API first (unauthenticated, bypasses blocks)
-  const searchResult = await findContextViaSearch(targetDid, targetHandle, loggedInDid, loggedInHandle);
+  const searchResult = await findContextViaSearch(
+    targetDid,
+    targetHandle,
+    loggedInDid,
+    loggedInHandle
+  );
   if (searchResult) {
     return { post: searchResult, blockedBy: false };
   }
@@ -981,7 +1008,12 @@ async function generateContextForNewBlocks(
     }
 
     try {
-      const result = await findContextWithFallback(block.did, block.handle, loggedInDid, loggedInHandle);
+      const result = await findContextWithFallback(
+        block.did,
+        block.handle,
+        loggedInDid,
+        loggedInHandle
+      );
 
       if (result.post) {
         await addPostContext({
@@ -1066,10 +1098,7 @@ export async function performFullSync(): Promise<{
   await updateSyncState({ syncInProgress: true, lastError: undefined });
 
   try {
-    const [blockResult, muteResult] = await Promise.all([
-      syncBlocks(auth),
-      syncMutes(auth),
-    ]);
+    const [blockResult, muteResult] = await Promise.all([syncBlocks(auth), syncMutes(auth)]);
 
     // Generate context for newly imported blocks
     let guessedContexts = 0;
@@ -1251,9 +1280,7 @@ async function fetchSubscribedBlocklists(auth: AuthData): Promise<ListView[]> {
 
     if (response?.lists) {
       // Only add modlists (not curate lists)
-      const modlists = response.lists.filter(
-        (l) => l.purpose === 'app.bsky.graph.defs#modlist'
-      );
+      const modlists = response.lists.filter((l) => l.purpose === 'app.bsky.graph.defs#modlist');
       allLists.push(...modlists);
     }
     cursor = response?.cursor;
@@ -1766,7 +1793,9 @@ async function handleUnmuteRequest(did: string): Promise<{ success: boolean; err
  * Handle temp unblock for viewing a post context
  * This unblocks without removing from storage - we'll reblock shortly
  */
-async function handleTempUnblockForView(did: string): Promise<{ success: boolean; error?: string }> {
+async function handleTempUnblockForView(
+  did: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const auth = await getAuthToken();
     if (!auth?.accessJwt || !auth?.did || !auth?.pdsUrl) {
@@ -1777,13 +1806,23 @@ async function handleTempUnblockForView(did: string): Promise<{ success: boolean
     const permanentBlocks = await getPermanentBlocks();
     const blockData = permanentBlocks[did];
     const rkey = blockData?.rkey;
-    console.log('[ErgoBlock BG] Permanent block data for', did, ':', blockData ? { rkey: blockData.rkey, handle: blockData.handle } : 'not found');
+    console.log(
+      '[ErgoBlock BG] Permanent block data for',
+      did,
+      ':',
+      blockData ? { rkey: blockData.rkey, handle: blockData.handle } : 'not found'
+    );
 
     // Also check temp blocks
     const tempBlocks = await getTempBlocks();
     const tempBlockData = tempBlocks[did];
     const tempRkey = tempBlockData?.rkey;
-    console.log('[ErgoBlock BG] Temp block data for', did, ':', tempBlockData ? { rkey: tempBlockData.rkey, handle: tempBlockData.handle } : 'not found');
+    console.log(
+      '[ErgoBlock BG] Temp block data for',
+      did,
+      ':',
+      tempBlockData ? { rkey: tempBlockData.rkey, handle: tempBlockData.handle } : 'not found'
+    );
 
     const rkeyToUse = rkey || tempRkey;
     console.log('[ErgoBlock BG] Using rkey:', rkeyToUse || '(none - will scan)');
@@ -1881,68 +1920,70 @@ async function handleFindContext(
   }
 }
 
-browser.runtime.onMessage.addListener(
-  (message: ExtensionMessage, _sender, sendResponse: (response: MessageResponse) => void) => {
-    console.log('[ErgoBlock BG] Received message:', message.type);
+browser.runtime.onMessage.addListener(((
+  message: ExtensionMessage,
+  _sender: unknown,
+  sendResponse: (response: MessageResponse) => void
+) => {
+  console.log('[ErgoBlock BG] Received message:', message.type);
 
-    if (message.type === 'TEMP_BLOCK_ADDED' || message.type === 'TEMP_MUTE_ADDED') {
-      setupAlarm();
-      updateBadge();
-    }
-
-    if (message.type === 'SET_AUTH_TOKEN' && message.auth) {
-      browser.storage.local.set({ authToken: message.auth });
-      sendResponse({ success: true });
-    }
-
-    if (message.type === 'CHECK_NOW') {
-      checkExpirations().then(() => sendResponse({ success: true }));
-      return true; // Indicates async response
-    }
-
-    if (message.type === 'SYNC_NOW') {
-      performFullSync().then((result) => sendResponse(result));
-      return true; // Indicates async response
-    }
-
-    if (message.type === 'UNBLOCK_USER' && message.did) {
-      handleUnblockRequest(message.did).then(sendResponse);
-      return true; // Indicates async response
-    }
-
-    if (message.type === 'UNMUTE_USER' && message.did) {
-      handleUnmuteRequest(message.did).then(sendResponse);
-      return true; // Indicates async response
-    }
-
-    if (message.type === 'TEMP_UNBLOCK_FOR_VIEW' && message.did) {
-      handleTempUnblockForView(message.did).then(sendResponse);
-      return true; // Indicates async response
-    }
-
-    if (message.type === 'REBLOCK_USER' && message.did) {
-      handleReblockUser(message.did).then(sendResponse);
-      return true; // Indicates async response
-    }
-
-    if (message.type === 'FIND_CONTEXT' && message.did && message.handle) {
-      handleFindContext(message.did, message.handle).then(sendResponse);
-      return true; // Indicates async response
-    }
-
-    if (message.type === 'BLOCKLIST_AUDIT_SYNC') {
-      performBlocklistAuditSync().then(sendResponse);
-      return true; // Indicates async response
-    }
-
-    if (message.type === 'UNSUBSCRIBE_BLOCKLIST' && message.listUri) {
-      handleUnsubscribeFromBlocklist(message.listUri as string).then(sendResponse);
-      return true; // Indicates async response
-    }
-
-    return false;
+  if (message.type === 'TEMP_BLOCK_ADDED' || message.type === 'TEMP_MUTE_ADDED') {
+    setupAlarm();
+    updateBadge();
   }
-);
+
+  if (message.type === 'SET_AUTH_TOKEN' && message.auth) {
+    browser.storage.local.set({ authToken: message.auth });
+    sendResponse({ success: true });
+  }
+
+  if (message.type === 'CHECK_NOW') {
+    checkExpirations().then(() => sendResponse({ success: true }));
+    return true; // Indicates async response
+  }
+
+  if (message.type === 'SYNC_NOW') {
+    performFullSync().then((result) => sendResponse(result));
+    return true; // Indicates async response
+  }
+
+  if (message.type === 'UNBLOCK_USER' && message.did) {
+    handleUnblockRequest(message.did).then(sendResponse);
+    return true; // Indicates async response
+  }
+
+  if (message.type === 'UNMUTE_USER' && message.did) {
+    handleUnmuteRequest(message.did).then(sendResponse);
+    return true; // Indicates async response
+  }
+
+  if (message.type === 'TEMP_UNBLOCK_FOR_VIEW' && message.did) {
+    handleTempUnblockForView(message.did).then(sendResponse);
+    return true; // Indicates async response
+  }
+
+  if (message.type === 'REBLOCK_USER' && message.did) {
+    handleReblockUser(message.did).then(sendResponse);
+    return true; // Indicates async response
+  }
+
+  if (message.type === 'FIND_CONTEXT' && message.did && message.handle) {
+    handleFindContext(message.did, message.handle).then(sendResponse);
+    return true; // Indicates async response
+  }
+
+  if (message.type === 'BLOCKLIST_AUDIT_SYNC') {
+    performBlocklistAuditSync().then(sendResponse);
+    return true; // Indicates async response
+  }
+
+  if (message.type === 'UNSUBSCRIBE_BLOCKLIST' && message.listUri) {
+    handleUnsubscribeFromBlocklist(message.listUri as string).then(sendResponse);
+    return true; // Indicates async response
+  }
+
+  return false;
+}) as unknown as Parameters<typeof browser.runtime.onMessage.addListener>[0]);
 
 /**
  * Clear any stale sync state on startup

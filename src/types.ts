@@ -51,10 +51,7 @@ export type ExportData = Record<string, unknown>;
 export type ImportResult = Record<string, unknown>;
 
 export type NotificationType =
-  | 'expired_success'
-  | 'expired_failure'
-  | 'rate_limited'
-  | 'auth_error';
+  'expired_success' | 'expired_failure' | 'rate_limited' | 'auth_error';
 
 export interface BskySession {
   accessJwt: string;
