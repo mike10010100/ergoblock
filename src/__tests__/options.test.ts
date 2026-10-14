@@ -1,16 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { DEFAULT_OPTIONS, type ExtensionOptions } from '../types';
 
-// Declare global for Node.js environment
-declare const globalThis: {
-  chrome: typeof chrome;
-  document: {
-    getElementById: (id: string) => unknown;
-    querySelector: (selector: string) => unknown;
-  };
-  confirm: (message: string) => boolean;
-};
-
 // Mock storage state
 let mockLocalStorage: Record<string, unknown> = {};
 
@@ -120,7 +110,8 @@ describe('options module', () => {
 
     // Set up global mocks
     mockChrome = createMockChrome();
-    globalThis.chrome = mockChrome as unknown as typeof chrome;
+    (globalThis as unknown as { chrome: typeof chrome }).chrome =
+      mockChrome as unknown as typeof chrome;
     globalThis.confirm = vi.fn().mockReturnValue(true);
 
     // Mock document
@@ -158,6 +149,7 @@ describe('options module', () => {
         theme: 'dark',
         savePostContext: true,
         postContextRetentionDays: 90,
+        forgivenessPeriodDays: 90,
       };
       mockLocalStorage['extensionOptions'] = customOptions;
 
@@ -178,6 +170,7 @@ describe('options module', () => {
         theme: 'light',
         savePostContext: false,
         postContextRetentionDays: 30,
+        forgivenessPeriodDays: 90,
       };
 
       await mockChrome.storage.local.set({ extensionOptions: options });

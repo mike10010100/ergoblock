@@ -110,7 +110,7 @@ export function filterAndSort<T extends ManagedEntry | HistoryEntry | PostContex
   const dir = direction === 'asc' ? 1 : -1;
 
   filtered.sort((a, b) => {
-    let cmp = 0;
+    let cmp: number;
 
     switch (column) {
       case 'user': {
@@ -126,8 +126,8 @@ export function filterAndSort<T extends ManagedEntry | HistoryEntry | PostContex
         break;
       }
       case 'expires': {
-        const expA = 'expiresAt' in a ? ((a as ManagedEntry).expiresAt || Infinity) : Infinity;
-        const expB = 'expiresAt' in b ? ((b as ManagedEntry).expiresAt || Infinity) : Infinity;
+        const expA = 'expiresAt' in a ? (a as ManagedEntry).expiresAt || Infinity : Infinity;
+        const expB = 'expiresAt' in b ? (b as ManagedEntry).expiresAt || Infinity : Infinity;
         cmp = expA - expB;
         break;
       }

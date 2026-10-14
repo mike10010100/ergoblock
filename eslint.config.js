@@ -1,8 +1,18 @@
+import Module from 'node:module';
+const origResolve = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+  if (request === 'typescript' || request.startsWith('typescript/')) {
+    request = request.replace(/^typescript/, 'typescript-legacy');
+  }
+  return origResolve.call(this, request, parent, isMain, options);
+};
+
 import js from '@eslint/js';
-import tsPlugin from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
 import globals from 'globals';
 import prettierConfig from 'eslint-config-prettier';
+
+const { default: tsPlugin } = await import('@typescript-eslint/eslint-plugin');
+const { default: tsParser } = await import('@typescript-eslint/parser');
 
 export default [
   {
